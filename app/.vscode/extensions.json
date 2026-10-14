@@ -1,1 +1,12 @@
-{ "recommendations": ["expo.vscode-expo-tools"] }
+{
+  "recommendations": [
+    "expo.vscode-expo-tools",
+    "esbenp.prettier-vscode",
+    "dbaeumer.vscode-eslint",
+    "usernamehw.errorlens",
+    "yoavbls.pretty-ts-errors",
+    "formulahendry.auto-rename-tag",
+    "eamodio.gitlens",
+    "christian-kohler.path-intellisense"
+  ]
+}
