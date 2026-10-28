@@ -1,11 +1,20 @@
 # Desk Companion
 
-Application mobile développée avec React Native, Expo et TypeScript.
+A desk device that reminds students of their tasks with light and vibration, synced with a mobile app (React Native, Expo, TypeScript) through Supabase.
 
-- Dépôt : https://github.com/acronoxx/desk-companion
-- Le projet Expo se trouve dans le dossier `app/`. Toutes les commandes `npm` et `npx expo` se lancent depuis `app/`.
+- Repository: https://github.com/acronoxx/desk-companion
+- The Expo project is in the `app/` folder. Run every `npm` and `npx expo` command from `app/`.
 
-## Lancer l'application
+## Documentation
+
+| File | Content |
+|---|---|
+| [`docs/survey_report.pdf`](docs/survey_report.pdf) | Needs assessment (survey of 131 students) and roadmap |
+| [`docs/architecture.md`](docs/architecture.md) | Overall architecture: app, Supabase, ESP32, and the methods to write |
+| [`database/schema.md`](database/schema.md) | Database diagram and tables |
+| [`database/schema.sql`](database/schema.sql) | SQL script to create the database in Supabase |
+
+## Running the app
 
 ```bash
 cd app
@@ -13,42 +22,43 @@ npm install
 npx expo start
 ```
 
-Scanner le QR code avec **Expo Go** (Android) ou l'appareil photo (iOS).
+Scan the QR code with **Expo Go** (Android) or the camera app (iOS).
 
-Le téléphone et le PC doivent être sur le même réseau local. **Sur eduroam, ça ne marche pas** : utiliser le partage de connexion du téléphone, ou l'USB sur Android :
+The phone and the computer must be on the same local network. **It does not work on eduroam**: use your phone's hotspot instead, or USB on Android:
 
 ```bash
 adb reverse tcp:8081 tcp:8081
 npx expo start --localhost
 ```
 
-puis entrer `exp://localhost:8081` dans Expo Go.
+then enter `exp://localhost:8081` in Expo Go.
 
-## Structure du projet
+## Project structure
 
 ```
 desk-companion/
-├── app/                  ← projet Expo
+├── app/                  ← Expo project
 │   ├── src/
-│   │   ├── app/          ← écrans (1 fichier = 1 route, Expo Router)
-│   │   ├── components/   ← composants réutilisables
-│   │   ├── constants/    ← couleurs, espacements, polices (theme.ts)
-│   │   └── hooks/        ← logique réutilisable
-│   ├── assets/           ← images et icônes
-│   └── app.json          ← configuration de l'app
-├── database/
-└── docs/
+│   │   ├── app/          ← screens (1 file = 1 route, Expo Router)
+│   │   ├── components/   ← reusable components
+│   │   ├── constants/    ← colors, spacing, fonts (theme.ts)
+│   │   └── hooks/        ← reusable logic
+│   ├── assets/           ← images and icons
+│   └── app.json          ← app configuration
+├── database/             ← Supabase schema (schema.sql + schema.md)
+└── docs/                 ← survey report, architecture
 ```
 
-| Je veux ajouter... | Dans... |
+| I want to add... | In... |
 |---|---|
-| Une page | `app/src/app/` |
-| Un morceau d'interface utilisé à plusieurs endroits | `app/src/components/` |
-| Une couleur ou une taille | `app/src/constants/theme.ts` |
-| De la logique réutilisable (état, calculs) | `app/src/hooks/` |
-| Une image ou une icône | `app/assets/` |
+| A screen | `app/src/app/` |
+| A piece of UI used in several places | `app/src/components/` |
+| A color or a size | `app/src/constants/theme.ts` |
+| Reusable logic (state, calculations) | `app/src/hooks/` |
+| An image or an icon | `app/assets/` |
+| A table or a column | `database/schema.sql`, then update `database/schema.md` |
 
-Ne pas modifier : `node_modules/`, `.expo/`, `expo-env.d.ts`, `package-lock.json` (à la main).
-Ne jamais mettre de composant dans `src/app/` : chaque fichier de ce dossier devient une page.
+Do not edit: `node_modules/`, `.expo/`, `expo-env.d.ts`, `package-lock.json` (by hand).
+Never put a component in `app/src/app/`: every file in that folder becomes a screen.
 
-Pour installer un paquet, utiliser `npx expo install nom-du-paquet` et non `npm install`.
+To install a package, use `npx expo install package-name`, not `npm install` (it picks the version compatible with the Expo SDK).
