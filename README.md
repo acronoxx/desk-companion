@@ -39,22 +39,22 @@ then enter `exp://localhost:8081` in Expo Go.
 desk-companion/
 ├── app/                  ← Expo project
 │   ├── src/
-│   │   ├── app/          ← screens (1 file = 1 route, Expo Router)
-│   │   ├── components/   ← reusable components
-│   │   ├── constants/    ← colors, spacing, fonts (theme.ts)
-│   │   └── hooks/        ← reusable logic
-│   ├── assets/           ← images and icons
+│   │   └── app/          ← screens (1 file = 1 route, Expo Router)
 │   └── app.json          ← app configuration
 ├── database/             ← Supabase schema (schema.sql + schema.md)
 └── docs/                 ← survey report, architecture
 ```
 
+The app is kept minimal for now. Create the other folders when they are needed:
+
 | I want to add... | In... |
 |---|---|
 | A screen | `app/src/app/` |
 | A piece of UI used in several places | `app/src/components/` |
-| A color or a size | `app/src/constants/theme.ts` |
+| Data types (`Reminder`, `Device`...) | `app/src/types/` |
+| A fixed value (color, size, sync interval...) | `app/src/constants/` |
 | Reusable logic (state, calculations) | `app/src/hooks/` |
+| Supabase calls | `app/src/services/` |
 | An image or an icon | `app/assets/` |
 | A table or a column | `database/schema.sql`, then update `database/schema.md` |
 
