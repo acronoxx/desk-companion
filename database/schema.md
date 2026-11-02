@@ -21,7 +21,7 @@ erDiagram
 
     PROFILES {
         uuid id PK, FK
-        text display_name
+        text display_name "default: email before the @"
         timestamptz created_at
     }
 
@@ -70,6 +70,18 @@ erDiagram
 | user → devices | 1 – many |
 | user → reminders | 1 – many |
 | reminder ↔ devices | many – many, through `reminder_devices` |
+
+## Profiles
+
+A profile is created by the `on_auth_user_created` trigger (function `handle_new_user`) as soon as an account is created, from the app or from the dashboard. The app never inserts or deletes profiles: the row is deleted with the account (`on delete cascade`).
+
+| Column | Purpose |
+|---|---|
+| `display_name` | Name shown in the app, never `null` or empty (spaces only counts as empty). Defaults to the part of the email before the `@` (`alice.martin@school.fr` → `alice.martin`). The user can change it in the Settings tab. |
+
+To change the default, edit `handle_new_user` in `schema.sql`, then run that block again in the SQL Editor (`create or replace function`). Existing profiles are not updated.
+
+## Reminders and devices
 
 A reminder belongs to the user, not to a device. It can be shown on several devices (e.g. one on the desk and one in the bedroom), or on none: it then only shows in the app. Deleting a device does not delete its reminders, only the links.
 
