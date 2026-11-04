@@ -9,21 +9,22 @@
 -- ---------------------------------------------------------------------------
 create table public.profiles (
   id           uuid primary key references auth.users (id) on delete cascade,
-  display_name text,
+  display_name text not null
+               check (char_length(btrim(display_name)) > 0),
   created_at   timestamptz not null default now()
 );
 
 -- Automatically creates the profile when someone signs up.
--- display_name comes from the metadata passed at sign-up:
--- supabase.auth.signUp({ email, password, options: { data: { display_name } } })
-create function public.handle_new_user()
+-- display_name defaults to the part of the email before the @
+-- (alice.martin@school.fr → alice.martin). The user can change it later in the app.
+create or replace function public.handle_new_user()
 returns trigger
 language plpgsql
 security definer set search_path = ''
 as $$
 begin
   insert into public.profiles (id, display_name)
-  values (new.id, new.raw_user_meta_data ->> 'display_name');
+  values (new.id, split_part(new.email, '@', 1));
   return new;
 end;
 $$;
