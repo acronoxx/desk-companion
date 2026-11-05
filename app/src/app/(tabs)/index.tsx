@@ -1,17 +1,11 @@
-import { StyleSheet, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
+
+import { commonStyles } from '@/styles/common';
 
 export default function HomeScreen() {
   return (
-    <View style={styles.container}>
+    <View style={commonStyles.container}>
       <Text>Desk Companion</Text>
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-});
