@@ -1,5 +1,6 @@
 #include "reminders.h"
 #include "config.h"
+#include "sync_client.h"
 
 static Reminder *reminders = nullptr;
 
@@ -8,7 +9,12 @@ static Reminder *reminders = nullptr;
 bool updateReminders() {
     Reminder* oldReminders = reminders;
 
-    Reminder* newReminders = nullptr; //TODO
+    String body;
+    if (!fetchSyncJson(body)) {
+        return false;
+    }
+
+    Reminder* newReminders = parseReminders(body);
     if (newReminders == nullptr) {
         return false;
     }
@@ -22,7 +28,7 @@ bool updateReminders() {
         }
 
         for (const Reminder* oldR = oldReminders; oldR->id[0] != '\0'; ++oldR) {
-            if (strcmp(newR->id, oldR->id) == 0) {
+            if (strcmp(newR->id, oldR->id) == 0 && newR->remindAt == oldR->remindAt) {
                 newR->alerted = oldR->alerted;
                 break;
             }

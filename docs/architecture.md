@@ -18,11 +18,11 @@ flowchart LR
     subgraph Supabase
         Auth["Auth"]
         DB[("PostgreSQL<br/>profiles · devices · reminders · reminder_devices")]
-        Fn["Edge Functions<br/>device-register · device-claim<br/>device-sync · device-complete"]
+        Fn["Edge Functions<br/>device-register · device-claim<br/>device-sync"]
     end
 
     subgraph Device["Desk companion"]
-        ESP["ESP32<br/>LEDs · vibration motor · button"]
+        ESP["ESP32 on battery<br/>LEDs · vibration motor (optional)"]
     end
 
     App -- "supabase-js (user JWT, RLS)" --> DB
@@ -89,37 +89,40 @@ sequenceDiagram
         F-->>E: { server_time, settings, reminders[] }
     end
     E->>E: remind_at reached → LEDs + vibration
+    A->>DB: mark as done (complete_reminder)
+    E->>F: next sync: the reminder is no longer in the list
+    E->>E: LED off
 ```
 
 ### 3. Marking a reminder as done
 
-From the device (button) **or** from the app. Both call the same SQL function `complete_reminder`, which handles recurrence:
+Only from the app: the device has no button. The app calls the SQL function `complete_reminder`, which handles recurrence:
 
 - one-off reminder → `completed_at = now()`;
 - recurring reminder → `due_at` and `remind_at` move to the next occurrence (next day / week / month / year), `completed_at` stays `null`.
 
-Putting this logic in SQL avoids writing it twice (TypeScript and C++).
+The device sees it at its next sync (at most 30 s later): the reminder is gone from the list (or, if recurring, its `remind_at` moved forward), so the LED turns off.
 
 ## Database
 
-See `database/schema.md`. Still to add for the device (under discussion):
+See `database/schema.md`. Done for the device: `devices.secret_hash` (authenticates the ESP32) and a nullable `devices.user_id` (the ESP32 registers itself before being paired). Still to add:
 
-- `devices.secret_hash`: authenticate the ESP32;
-- a `device_pairings` table: devices that are powered on but not linked to a user yet;
+- pairing (code typed in the app → sets `devices.user_id`);
 - the `complete_reminder(reminder_id uuid)` function.
 
 ## Edge Functions (Supabase, TypeScript / Deno)
 
-Suggested folder: `supabase/functions/<name>/index.ts`.
+Folder: `supabase/functions/<name>/index.ts`, shared code in `supabase/functions/_shared/device.ts`. Deploy with `npx supabase functions deploy`.
 
 | Function | Called by | Auth | Input | Output |
 |---|---|---|---|---|
-| `device-register` | ESP32 | none (first contact) | `{ serial_number, secret, pairing_code }` | `{ paired: false }` or `{ paired: true }` |
+| `device-register` | ESP32 | `apikey` + `x-device-serial` + `x-device-secret` (first contact: creates the row) | — (POST) | `{ registered: true, paired }`, `409` if the serial is known with another secret. Pairing code: to add |
 | `device-claim` | App | user JWT | `{ code, name }` | the created `devices` row |
-| `device-sync` | ESP32 | `x-device-serial` + `x-device-secret` | — | `{ server_time, settings, reminders: [{ id, title, due_at, remind_at, recurrence }] }` |
-| `device-complete` | ESP32 | `x-device-serial` + `x-device-secret` | `{ reminder_id }` | the updated reminder |
+| `device-sync` | ESP32 | `apikey` + `x-device-serial` + `x-device-secret` | — | `{ server_time, settings, reminders: [{ id, title, remind_at }] }` — times in **Unix seconds** (UTC), not ISO strings, so the ESP32 has no date parsing to do |
 
-Shared method: `authenticateDevice(req): Promise<Device>` — reads both headers, compares `sha256(secret)` with `devices.secret_hash`, returns 401 otherwise.
+The two device functions (`device-register`, `device-sync`) are deployed with `verify_jwt = false` (in `supabase/config.toml`): the ESP32 has no user JWT. They use `withSupabase({ auth: "publishable" })` from `@supabase/server`: the `apikey` header must be the project's publishable key (not secret, it only filters unknown clients), then the functions check the device secret themselves and read the database with `ctx.supabaseAdmin` (service role).
+
+Shared method: `authenticateDevice(admin, req): Promise<Device | null>` — reads both headers, compares `sha256(secret)` with `devices.secret_hash`, the function returns 401 when it is `null`.
 
 `device-sync` only returns pending reminders linked to this device (through `reminder_devices`), sorted by `remind_at`, limited (e.g. 20) to fit in the ESP32's RAM.
 
@@ -252,22 +255,24 @@ useDevices(): { devices: Device[]; loading: boolean; error: Error | null; refres
 useReminders(deviceId?: string): { reminders: Reminder[]; loading: boolean; error: Error | null; refresh(): Promise<void> }
 ```
 
-Option: subscribe `useReminders` to Supabase Realtime to see a reminder turn "done" when the device button is pressed, without reloading.
-
 ## Firmware (ESP32)
 
-Arduino IDE (or PlatformIO), one file per responsibility:
+PlatformIO project (open the `firmware/` folder itself in VS Code). One module per responsibility: prototypes in `include/*.h`, code in `src/*.cpp`. Libraries (WiFiManager, ArduinoJson v7) are listed in `platformio.ini` and downloaded automatically.
 
 ```
 firmware/
-├── firmware.ino      ← setup() + loop(): state machine
-├── config.h          ← pins, Supabase URL, sync interval
-├── storage.*         ← NVS (Preferences): secret key, pairing code, paired state
-├── network.*         ← Wi-Fi (WiFiManager) + time (NTP)
-├── api.*             ← Edge Function calls
-├── reminders.*       ← local list + due detection
-├── alerts.*          ← LEDs + vibration motor (alerts and status patterns)
-└── button.*          ← debounced reading
+├── platformio.ini    ← board, libraries, Serial speed
+├── include/
+│   ├── config.h          ← pins, timeouts, sync interval, Edge Function paths
+│   ├── secrets.h         ← Wi-Fi credentials, Supabase URL + publishable key (ignored by git)
+│   ├── types.h           ← shared structs (Reminder)
+│   ├── wifi_connection.h ← Wi-Fi + time (NTP)
+│   ├── sync_client.h     ← device secret (NVS) + Edge Function calls (register, sync) + JSON parsing
+│   ├── reminders.h       ← local list + due detection
+│   └── alerts.h          ← LED + vibration motor
+└── src/
+    ├── main.cpp      ← setup() + loop()
+    └── <module>.cpp  ← one per header above (config.h, secrets.h and types.h have none)
 ```
 
 ### State machine
@@ -279,45 +284,20 @@ stateDiagram-v2
     [*] --> Idle: Wi-Fi OK, paired
     WifiSetup --> Pairing: Wi-Fi configured
     Pairing --> Idle: device-register returns paired = true
-    Idle --> Alerting: a reminder is due
-    Alerting --> Idle: button pressed → device-complete
+    Idle --> Alerting: a reminder is due → blinking + vibration
+    Alerting --> Pending: vibrationDuration elapsed → LED stays on
+    Alerting --> Idle: done in the app (gone at the next sync)
+    Pending --> Idle: done in the app (gone at the next sync)
     Idle --> Pairing: device-sync returns 401 (device deleted in the app)
 ```
 
 ### Methods
 
-```cpp
-// storage
-String getOrCreateSecret();          // generated with esp_random() on first boot
-String getOrCreatePairingCode();     // 6 digits, generated on first boot
-bool   isPaired();
-void   setPaired(bool paired);
+The prototypes, with their documentation, are in `firmware/include/*.h`.
 
-// network
-bool   connectWifi(const String &pairingCode);  // WiFiManager: "DeskCompanion-XXXX" portal showing the code, if needed
-void   syncTime();                   // configTime(0, 0, "pool.ntp.org"): UTC is enough, remind_at is in UTC
-String getSerialNumber();            // MAC address
+In `loop()`: never a long `delay()`. Compare `millis()` to know when to resync (30 s) and to animate the LEDs, otherwise the blinking freezes during waits.
 
-// api  (HTTPS + ArduinoJson)
-RegisterResult registerDevice();                     // → device-register
-bool           syncReminders(SyncResult &out);       // → device-sync; false on network error
-bool           completeReminder(const String &id);   // → device-complete
-
-// reminders
-void       setReminders(const Reminder *list, size_t count);
-Reminder  *getDueReminder(time_t now);               // remind_at <= now, not done yet
-
-// alerts
-void startAlert(uint8_t vibrationIntensity);         // LEDs + vibration motor via PWM (0–100)
-void updateAlert();                                  // call in loop(): blinking, pulses
-void stopAlert();
-void showStatus(DeviceStatus status);                // LED pattern: Wi-Fi setup, waiting for pairing, error
-
-// button
-bool wasPressed();                                   // rising edge, debounced
-```
-
-In `loop()`: never a long `delay()`. Compare `millis()` to know when to resync (30 s) and animate the alert, otherwise the button stops responding.
+Power: the device runs on a battery, and Wi-Fi is what drains it. Measure the battery life with a 30 s sync first; if it is too short, increase `SYNC_INTERVAL_MS` or put the ESP32 in light / deep sleep between syncs (later).
 
 ## Work order
 
@@ -328,9 +308,9 @@ Consistent with the roadmap in the report:
 | 1 | Tables + SQL additions above in Supabase, test data | — |
 | 2 | `lib/supabase.ts`, `services/auth.ts`, login / signup screens | 1 |
 | 3 | `services/reminders.ts` + `devices.ts`, reminder / device screens (with a device created by hand in SQL) | 2 |
-| 4 | Edge Functions `device-sync` and `device-complete`, tested with `curl` | 1 |
+| 4 | Edge Function `device-sync`, tested with `curl` | 1 |
 | 5 | Firmware: Wi-Fi, NTP, LEDs (Fab Lab) | — |
-| 6 | Firmware: `api` + `reminders` + alerts + button | 4, 5 |
+| 6 | Firmware: `api` + `reminders` + alerts | 4, 5 |
 | 7 | Pairing: `device-register`, `device-claim`, `pair.tsx` screen | 3, 6 |
 
 Pairing comes last: in the meantime, the device can be created by hand in Supabase and its key flashed into the ESP32, which unblocks the app and the firmware in parallel.

@@ -27,9 +27,10 @@ erDiagram
 
     DEVICES {
         uuid id PK
-        uuid user_id FK
+        uuid user_id FK "null until paired"
         text name
         text serial_number UK "ESP32 MAC address"
+        text secret_hash "sha256 of the device secret"
         timestamptz last_seen_at
         jsonb settings "settings: vibration intensity..."
         timestamptz created_at
@@ -85,7 +86,7 @@ To change the default, edit `handle_new_user` in `schema.sql`, then run that blo
 
 A reminder belongs to the user, not to a device. It can be shown on several devices (e.g. one on the desk and one in the bedroom), or on none: it then only shows in the app. Deleting a device does not delete its reminders, only the links.
 
-A reminder shown on several devices is marked as done everywhere as soon as the button of one of them is pressed.
+A reminder is marked as done in the app (devices have no button); it then stops on every device it is shown on, at their next sync.
 
 ## Reminders
 
@@ -96,7 +97,7 @@ A reminder shown on several devices is marked as done everywhere as soon as the 
 | `recurrence` | `null` for a one-off reminder, otherwise `daily` / `weekly` / `monthly` / `yearly`. |
 | `completed_at` | `null` until it is done. |
 
-Marking as done (`complete_reminder` function, used by the app and by the ESP32):
+Marking as done (`complete_reminder` function, called by the app):
 
 - **one-off reminder**: `completed_at = now()`, it disappears from the device;
 - **recurring reminder**: `due_at` and `remind_at` move forward together by one period until they are in the future. `completed_at` stays `null`.
@@ -124,8 +125,23 @@ Each user can only read and change their own rows (Row Level Security).
 | Table | The app can... |
 |---|---|
 | `profiles` | read, update (created by the trigger, deleted with the account) |
-| `devices` | read, update, delete. **Not create**: a device is only created by pairing, otherwise anyone could claim someone else's serial number. |
+| `devices` | read, update, delete. **Not create**: the ESP32 creates its own row (Edge Function `device-register`), otherwise anyone could claim someone else's serial number. |
 | `reminders` | everything |
 | `reminder_devices` | read, create, delete, only if both the reminder **and** the device belong to the user |
 
-During development, before pairing exists, devices are created by hand in Supabase (Table Editor or SQL Editor), which bypasses RLS.
+## Device registration
+
+On first boot, the ESP32 generates a random secret, keeps it in its flash memory, and calls `device-register`. The function creates the `devices` row with `user_id = null` and `secret_hash = sha256(secret)`: the secret itself is never stored. A row with `user_id = null` is invisible in the app (RLS).
+
+Every later request (`device-sync`) is accepted only if `sha256(x-device-secret)` matches `secret_hash`.
+
+Until pairing exists, link a device to a user by setting its `user_id` by hand in Supabase (Table Editor or SQL Editor), which bypasses RLS.
+
+If the ESP32's flash is fully erased, it generates a new secret and `device-register` answers `409`: delete the device's row so it can register again.
+
+Migration for an existing database (run once in the SQL Editor; the second line fails if `devices` already has rows):
+
+```sql
+alter table public.devices alter column user_id drop not null;
+alter table public.devices add column secret_hash text not null;
+```

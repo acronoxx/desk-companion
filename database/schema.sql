@@ -36,12 +36,15 @@ create trigger on_auth_user_created
 -- ---------------------------------------------------------------------------
 -- Physical devices (ESP32)
 -- A user can own several devices, a device belongs to a single user.
+-- The ESP32 creates its own row on first boot (Edge Function device-register),
+-- before being paired: user_id stays null until then.
 -- ---------------------------------------------------------------------------
 create table public.devices (
   id            uuid primary key default gen_random_uuid(),
-  user_id       uuid not null references public.profiles (id) on delete cascade,
+  user_id       uuid references public.profiles (id) on delete cascade,  -- null until paired
   name          text not null default 'My desk companion',
   serial_number text not null unique,   -- e.g. the ESP32 MAC address
+  secret_hash   text not null,          -- sha256 (hex) of the secret the ESP32 generated itself
   last_seen_at  timestamptz,            -- updated every time the ESP32 connects
   -- Settings edited in the app, read by the ESP32 (e.g. {"vibration_intensity": 50}).
   -- Stored as JSON so a setting can be added without changing the table.
@@ -153,7 +156,7 @@ create policy "Delete own reminder links" on public.reminder_devices
   ));
 
 -- ---------------------------------------------------------------------------
--- To write: mark a reminder as done (called by the app and by the ESP32)
+-- To write: mark a reminder as done (called by the app)
 -- ---------------------------------------------------------------------------
 -- complete_reminder(reminder_id uuid) returns public.reminders
 --   - one-off reminder   : completed_at = now()
