@@ -13,11 +13,10 @@ void setup() {
     Serial.begin(115200);
     delay(1000); // Wait for serial to initialize
 
-    bool isConnected = connectWifi(WIFI_SSID, WIFI_PASSWORD, WIFI_TIMEOUT_MS);
-    while(!isConnected) {
-        Serial.println("Connecting to Wi-Fi...");
-        delay(1000);
-        isConnected = connectWifi(WIFI_SSID, WIFI_PASSWORD, WIFI_TIMEOUT_MS);
+    bool isConnected = connectWifi();
+    while (!isConnected) {
+        Serial.println("Wi-Fi setup portal timed out, retrying...");
+        isConnected = connectWifi();
     }
     Serial.println("Connected to Wi-Fi");
 

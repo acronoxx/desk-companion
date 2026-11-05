@@ -5,6 +5,10 @@
 // Network configuration
 constexpr wifi_mode_t WIFI_MODE = WIFI_STA;
 
+// Wi-Fi setup portal (WiFiManager)
+constexpr const char *AP_NAME_PREFIX   = "DeskCompanion-";
+constexpr uint16_t    PORTAL_TIMEOUT_S = 180;
+
 // Max time to wait for the Wi-Fi connection, in milliseconds.
 constexpr uint32_t WIFI_TIMEOUT_MS = 20000;
 

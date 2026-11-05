@@ -1,28 +1,33 @@
 #include <WiFi.h>
+#include <WiFiManager.h>
 #include "wifi_connection.h"
 #include "config.h"
+
+// "DeskCompanion-EEFF" for the MAC AA:BB:CC:DD:EE:FF: each device has its own
+// name, so two devices set up side by side can't be confused.
+static String apName() {
+    String mac = WiFi.macAddress();
+    mac.replace(":", "");
+    return String(AP_NAME_PREFIX) + mac.substring(8);
+}
+
 
 // Connects to a WPA2-Personal network (hotspot, home router).
 // Blocks until connected or until timeoutMs has elapsed.
 // Returns true if connected.
-bool connectWifi(const char *ssid, const char *password, uint32_t timeoutMs){
+bool connectWifi() {
     WiFi.mode(WIFI_MODE);
-    WiFi.begin(ssid, password);
-    uint32_t startTime = millis();
-    while (WiFi.status() != WL_CONNECTED && millis() - startTime < timeoutMs) {
-        delay(100);
-    }
-    Serial.printf("Wi-Fi status: %d\n", WiFi.status());
-    bool isConnected = WiFi.status() == WL_CONNECTED;
+
+    WiFiManager wm;
+    wm.setConnectTimeout(WIFI_TIMEOUT_MS / 1000); // Seconds
+    wm.setConfigPortalTimeout(PORTAL_TIMEOUT_S);
+
+    bool isConnected = wm.autoConnect(apName().c_str());
     if (isConnected) {
         WiFi.setAutoReconnect(true);
     }
-    if (!isConnected) {
-        WiFi.disconnect();
-    }
     return isConnected;
 }
-
 // True while the ESP32 is connected to the Wi-Fi.
 bool isWifiConnected(){
     return WiFi.status() == WL_CONNECTED;
