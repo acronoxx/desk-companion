@@ -1,5 +1,5 @@
 import { supabase } from '../lib/supabase';
-import type { Reminder, ReminderInput } from '../types/database';
+import type { Reminder, ReminderInput } from '../types/models';
 
 /**
  * Creates a reminder for a user.

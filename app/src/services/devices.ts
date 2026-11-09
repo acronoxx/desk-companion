@@ -1,5 +1,5 @@
 import { supabase } from '../lib/supabase';
-import type { Device, DeviceSettings } from '../types/database';
+import type { Device, DeviceSettings } from '../types/models';
 
 /**
  * Links a new device to the user with its 6-digit pairing code.

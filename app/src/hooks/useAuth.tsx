@@ -4,13 +4,13 @@ import { useState } from 'react';
 const AuthContext = React.createContext<{
   user: User | null;
   isLoading: boolean;
-  setUser: React.Dispatch<React.SetStateAction<User | null>>;
-  setIsLoading: React.Dispatch<React.SetStateAction<boolean>>;
+  signIn: (user: User) => void;
+  signOut: () => void;
 }>({
   user: null,
   isLoading: false,
-  setUser: () => {},
-  setIsLoading: () => {},
+  signIn: () => {},
+  signOut: () => {},
 });
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
