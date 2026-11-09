@@ -1,5 +1,5 @@
 import { supabase } from '../lib/supabase';
-import type { Profile } from '../types/models';
+import type { Profile } from '../types/database';
 
 /**
  * Gets the profile of a user.
