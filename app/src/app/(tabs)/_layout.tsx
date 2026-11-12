@@ -19,8 +19,7 @@ export default function TabsLayout() {
         // Floating bar: lifted above the home indicator, the screens scroll under it.
         tabBarStyle: [styles.bar, { bottom: Math.max(insets.bottom, 10) }],
         sceneStyle: { backgroundColor: Colors.bg },
-      }}
-    >
+      }}>
       <Tabs.Screen
         name="index"
         options={{

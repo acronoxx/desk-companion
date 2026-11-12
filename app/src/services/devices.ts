@@ -83,7 +83,7 @@ export async function getDevice(userId: string, deviceId: string): Promise<Devic
 export async function updateDevice(
   userId: string,
   deviceId: string,
-  updates: Partial<Pick<Device, 'name' | 'settings'>>,
+  updates: { name?: string; settings?: Partial<DeviceSettings> },
 ): Promise<Device> {
   const device = await getDevice(userId, deviceId);
   const updatedSettings: DeviceSettings = {
