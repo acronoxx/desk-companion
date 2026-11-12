@@ -1,5 +1,18 @@
 import { supabase } from '../lib/supabase';
+import type { Tables } from '../types/database';
 import type { Device, DeviceSettings } from '../types/models';
+
+/** Every column except secret_hash, which must never reach the app. */
+const DEVICE_COLUMNS = 'id, user_id, serial_number, name, settings, last_seen_at, created_at';
+
+/**
+ * Converts a devices row to a Device.
+ * settings is typed Json by the generated types: the database only checks it is an object,
+ * so the cast trusts the app and the ESP32 to write the DeviceSettings shape.
+ */
+function toDevice(row: Omit<Tables<'devices'>, 'secret_hash'>): Device {
+  return { ...row, settings: row.settings as DeviceSettings };
+}
 
 /**
  * Links a new device to the user with its 6-digit pairing code.
@@ -23,7 +36,7 @@ export async function claimDevice(code: string, name: string): Promise<Device> {
 export async function getDevices(userId: string): Promise<Device[]> {
   const { data, error } = await supabase
     .from('devices')
-    .select('*')
+    .select(DEVICE_COLUMNS)
     .eq('user_id', userId)
     .order('name', { ascending: true });
 
@@ -31,7 +44,7 @@ export async function getDevices(userId: string): Promise<Device[]> {
     throw new Error(error.message);
   }
 
-  return data;
+  return data.map(toDevice);
 }
 
 /**
@@ -44,7 +57,7 @@ export async function getDevices(userId: string): Promise<Device[]> {
 export async function getDevice(userId: string, deviceId: string): Promise<Device> {
   const { data, error } = await supabase
     .from('devices')
-    .select('*')
+    .select(DEVICE_COLUMNS)
     .eq('user_id', userId)
     .eq('id', deviceId)
     .single();
@@ -53,7 +66,7 @@ export async function getDevice(userId: string, deviceId: string): Promise<Devic
     throw new Error(error.message);
   }
 
-  return data;
+  return toDevice(data);
 }
 
 /**
@@ -83,14 +96,14 @@ export async function updateDevice(
     .update({ ...updates, settings: updatedSettings })
     .eq('user_id', userId)
     .eq('id', deviceId)
-    .select('*')
+    .select(DEVICE_COLUMNS)
     .single();
 
   if (error) {
     throw new Error(error.message);
   }
 
-  return data;
+  return toDevice(data);
 }
 
 /**

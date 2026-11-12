@@ -1,23 +1,20 @@
+import type { Session } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
 
 /**
- * Signs the user up with email and password.
- * The session is saved automatically (AsyncStorage).
+ * Signs the user up. The display name is stored in the user metadata,
+ * then copied into `profiles` by the database trigger.
  *
- * @param email - The user's email address.
- * @param password - The user's password.
- * @throws If the credentials are wrong or the network fails.
+ * @returns The Supabase data. `session` is null if email confirmation is required.
+ * @throws AuthError (e.g. code 'email_exists', 'weak_password').
  */
-export async function signUpWithEmail(email: string, password: string) {
+export async function signUpWithEmail(email: string, password: string, displayName: string) {
   const { data, error } = await supabase.auth.signUp({
     email,
     password,
+    options: { data: { display_name: displayName } },
   });
-
-  if (error) {
-    throw new Error(error.message);
-  }
-
+  if (error) throw error;
   return data;
 }
 
@@ -25,48 +22,32 @@ export async function signUpWithEmail(email: string, password: string) {
  * Signs the user in with email and password.
  * The session is saved automatically (AsyncStorage).
  *
- * @param email - The user's email address.
- * @param password - The user's password.
- * @throws If the credentials are wrong or the network fails.
+ * @throws AuthError (e.g. code 'invalid_credentials', 'email_not_confirmed').
  */
 export async function signInWithEmail(email: string, password: string) {
-  const { data, error } = await supabase.auth.signInWithPassword({
-    email,
-    password,
-  });
-
-  if (error) {
-    throw new Error(error.message);
-  }
-
+  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+  if (error) throw error;
   return data;
 }
 
 /**
- * Signs the user out.
+ * Signs the user out and removes the saved session.
  *
- * @throws If the network fails.
+ * @throws AuthError if the network fails.
  */
 export async function signOut() {
   const { error } = await supabase.auth.signOut();
-
-  if (error) {
-    throw new Error(error.message);
-  }
+  if (error) throw error;
 }
 
 /**
- * Gets the current session, read from AsyncStorage at app launch.
+ * Subscribes to session changes (initial session at launch, sign in, sign out, token refresh).
  *
- * @returns The session, or null if nobody is logged in.
- * @throws If the network fails.
+ * @returns A function that unsubscribes.
  */
-export async function getSession() {
-  const { data, error } = await supabase.auth.getSession();
-
-  if (error) {
-    throw new Error(error.message);
-  }
-
-  return data.session;
+export function onAuthChange(callback: (session: Session | null) => void): () => void {
+  const { data } = supabase.auth.onAuthStateChange((_event, session) => {
+    callback(session);
+  });
+  return () => data.subscription.unsubscribe();
 }
