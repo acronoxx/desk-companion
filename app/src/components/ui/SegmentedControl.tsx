@@ -9,7 +9,11 @@ type SegmentedControlProps<T extends string> = {
 };
 
 /** A row of pills where exactly one is selected (filters, views...). */
-export default function SegmentedControl<T extends string>({ options, value, onChange }: SegmentedControlProps<T>) {
+export default function SegmentedControl<T extends string>({
+  options,
+  value,
+  onChange,
+}: SegmentedControlProps<T>) {
   return (
     <View style={styles.row} accessibilityRole="tablist">
       {options.map((option) => {
@@ -20,8 +24,7 @@ export default function SegmentedControl<T extends string>({ options, value, onC
             onPress={() => onChange(option.value)}
             accessibilityRole="tab"
             accessibilityState={{ selected: isSelected }}
-            style={[styles.pill, isSelected && styles.pillSelected]}
-          >
+            style={[styles.pill, isSelected && styles.pillSelected]}>
             <Text style={[styles.label, isSelected && styles.labelSelected]}>{option.label}</Text>
           </Pressable>
         );

@@ -133,24 +133,36 @@ export async function setReminderDevices(reminderId: string, deviceIds: string[]
 }
 
 /**
- * Marks a reminder as done (completed_at = now). It then disappears from the devices.
+ * Gets the ids of the devices a reminder is shown on.
  *
- * TODO: a recurring reminder should move to its next occurrence instead
- * (complete_reminder SQL function, not written yet).
+ * @param reminderId - The reminder's id.
+ * @throws If the network fails.
+ */
+export async function getReminderDeviceIds(reminderId: string): Promise<string[]> {
+  const { data, error } = await supabase
+    .from('reminder_devices')
+    .select('device_id')
+    .eq('reminder_id', reminderId);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return data.map((link) => link.device_id);
+}
+
+/**
+ * Marks a reminder as done, through the complete_reminder SQL function:
+ * - one-off reminder: completed_at = now, it disappears from the devices;
+ * - recurring reminder: due_at and remind_at move to the next occurrence, completed_at stays null.
+ * RLS applies inside the function, so only the user's own reminders can be completed.
  *
- * @param userId - The user's id (session.user.id).
  * @param reminderId - The reminder's id.
  * @returns The updated reminder.
  * @throws If the reminder does not exist or the network fails.
  */
-export async function completeReminder(userId: string, reminderId: string): Promise<Reminder> {
-  const { data, error } = await supabase
-    .from('reminders')
-    .update({ completed_at: new Date().toISOString() })
-    .eq('user_id', userId)
-    .eq('id', reminderId)
-    .select('*')
-    .single();
+export async function completeReminder(reminderId: string): Promise<Reminder> {
+  const { data, error } = await supabase.rpc('complete_reminder', { reminder_id: reminderId });
 
   if (error) {
     throw new Error(error.message);

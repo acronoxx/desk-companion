@@ -1,5 +1,13 @@
 import type { ComponentProps } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
+import {
+  ActivityIndicator,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+  type StyleProp,
+  type ViewStyle,
+} from 'react-native';
 import Feather from '@expo/vector-icons/Feather';
 import { Colors } from '@/constants/Colors';
 import { Fonts } from '@/constants/Fonts';
@@ -44,8 +52,7 @@ export default function Button({
         pressed && styles.pressed,
         disabled && styles.disabled,
         style,
-      ]}
-    >
+      ]}>
       {loading ? (
         <ActivityIndicator color={Colors.ink} />
       ) : (

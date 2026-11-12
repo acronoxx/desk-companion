@@ -180,7 +180,21 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      complete_reminder: {
+        Args: { reminder_id: string }
+        Returns: {
+          completed_at: string | null
+          created_at: string
+          details: string | null
+          due_at: string
+          id: string
+          recurrence: Database["public"]["Enums"]["recurrence"] | null
+          remind_at: string
+          title: string
+          updated_at: string
+          user_id: string
+        }
+      }
     }
     Enums: {
       recurrence: "daily" | "weekly" | "monthly" | "yearly"

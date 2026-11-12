@@ -58,6 +58,11 @@ function RootNavigator() {
           <Stack screenOptions={{ headerShown: false }}>
             <Stack.Protected guard={isLoggedIn}>
               <Stack.Screen name="(tabs)" />
+              {/* Opened on top of the tabs, with their own back button (TopBar). */}
+              <Stack.Screen name="reminders/new" options={{ presentation: 'modal' }} />
+              <Stack.Screen name="reminders/[id]" />
+              <Stack.Screen name="devices/pair" options={{ presentation: 'modal' }} />
+              <Stack.Screen name="devices/[id]" />
             </Stack.Protected>
             <Stack.Protected guard={!isLoggedIn}>
               <Stack.Screen name="(auth)" />

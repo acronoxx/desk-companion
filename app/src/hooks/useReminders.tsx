@@ -7,6 +7,7 @@ import {
   createReminder,
   deleteReminder,
   getReminders,
+  setReminderDevices,
   updateReminder,
 } from '@/services/reminders';
 
@@ -20,10 +21,20 @@ export type UseRemindersResult = {
   refresh: () => void;
   /** Marks a reminder as done. A recurring reminder moves to its next occurrence instead. */
   complete: (reminderId: string) => Promise<void>;
-  /** Creates a reminder from the form fields. */
-  create: (input: ReminderInput) => Promise<void>;
-  /** Changes the fields of a reminder. */
-  update: (reminderId: string, changes: Partial<ReminderInput>) => Promise<void>;
+  /**
+   * Creates a reminder from the form fields.
+   * deviceIds: the devices that alert (none = only visible in the app).
+   */
+  create: (input: ReminderInput, deviceIds?: string[]) => Promise<void>;
+  /**
+   * Changes the fields of a reminder.
+   * deviceIds: the new list of devices that alert. Leave it out to keep the current ones.
+   */
+  update: (
+    reminderId: string,
+    changes: Partial<ReminderInput>,
+    deviceIds?: string[],
+  ) => Promise<void>;
   /** Deletes a reminder (its links to devices are deleted too). */
   remove: (reminderId: string) => Promise<void>;
 };
@@ -95,23 +106,28 @@ export function RemindersProvider({ children }: { children: ReactNode }) {
   // The actions don't catch errors: the screen that called them decides what to show.
 
   const complete = async (reminderId: string) => {
-    if (!userId) return;
-    const updated = await completeReminder(userId, reminderId);
+    const updated = await completeReminder(reminderId);
     // A recurring reminder comes back with a new due_at, so the list is sorted again.
     setReminders((current) =>
       current.map((reminder) => (reminder.id === updated.id ? updated : reminder)).sort(byDueDate),
     );
   };
 
-  const create = async (input: ReminderInput) => {
+  const create = async (input: ReminderInput, deviceIds: string[] = []) => {
     if (!userId) return;
     const created = await createReminder(userId, input);
+    if (deviceIds.length > 0) await setReminderDevices(created.id, deviceIds);
     setReminders((current) => [...current, created].sort(byDueDate));
   };
 
-  const update = async (reminderId: string, changes: Partial<ReminderInput>) => {
+  const update = async (
+    reminderId: string,
+    changes: Partial<ReminderInput>,
+    deviceIds?: string[],
+  ) => {
     if (!userId) return;
     const updated = await updateReminder(userId, reminderId, changes);
+    if (deviceIds) await setReminderDevices(reminderId, deviceIds);
     // due_at may have changed, so the list is sorted again.
     setReminders((current) =>
       current.map((reminder) => (reminder.id === updated.id ? updated : reminder)).sort(byDueDate),

@@ -1,5 +1,7 @@
 import { useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { router } from 'expo-router';
+import Feather from '@expo/vector-icons/Feather';
 import QuickAddReminder from '@/components/QuickAddReminder';
 import ReminderRow from '@/components/ReminderRow';
 import Badge from '@/components/ui/Badge';
@@ -10,6 +12,7 @@ import ScreenHeader from '@/components/ui/ScreenHeader';
 import SegmentedControl from '@/components/ui/SegmentedControl';
 import { Colors } from '@/constants/Colors';
 import { Fonts } from '@/constants/Fonts';
+import { useActionError } from '@/hooks/useActionError';
 import { useReminders } from '@/hooks/useReminders';
 import type { Reminder } from '@/types/models';
 
@@ -60,6 +63,7 @@ function groupByDay(reminders: Reminder[]): DayGroup[] {
 
 export default function RemindersScreen() {
   const { reminders, error, complete, create } = useReminders();
+  const { actionError, run } = useActionError();
   const [filter, setFilter] = useState<Filter>('todo');
 
   const todoCount = reminders.filter((reminder) => reminder.completed_at === null).length;
@@ -70,25 +74,46 @@ export default function RemindersScreen() {
   });
   const groups = groupByDay(shown);
 
-  const handleQuickAdd = async (title: string) => {
+  const handleQuickAdd = (title: string) => {
     const dueAt = new Date(Date.now() + QUICK_ADD_DELAY_MS).toISOString();
-    await create({ title, due_at: dueAt, remind_at: dueAt });
+    return run(
+      () => create({ title, due_at: dueAt, remind_at: dueAt }),
+      'Could not add the reminder.',
+    );
   };
+
+  const handleComplete = (reminderId: string) =>
+    run(() => complete(reminderId), 'Could not mark the reminder as done.');
+
+  const openReminder = (reminderId: string) =>
+    router.push({ pathname: '/reminders/[id]', params: { id: reminderId } });
 
   return (
     <Screen>
       <ScreenHeader
         eyebrow="To do"
         title="Reminders"
-        right={<Badge label={`${todoCount} to do`} />}
+        right={
+          <View style={styles.headerRight}>
+            <Badge label={`${todoCount} to do`} />
+            <Pressable
+              onPress={() => router.push('/reminders/new')}
+              accessibilityRole="button"
+              accessibilityLabel="New reminder"
+              style={({ pressed }) => [styles.newButton, pressed && styles.newButtonPressed]}>
+              <Feather name="plus" size={22} color={Colors.ink} />
+            </Pressable>
+          </View>
+        }
       />
 
       <QuickAddReminder onAdd={handleQuickAdd} />
-      <Text style={styles.hint}>Quick reminders are due in one hour.</Text>
+      <Text style={styles.hint}>Quick reminders are due in one hour. Tap one to edit it.</Text>
 
       <SegmentedControl options={FILTERS} value={filter} onChange={setFilter} />
 
       {error && <Notice tone="error" message={error} />}
+      {actionError && <Notice tone="error" message={actionError} />}
 
       {groups.length === 0 ? (
         <Card>
@@ -102,8 +127,10 @@ export default function RemindersScreen() {
       ) : (
         groups.map((group) => (
           <Card key={group.key} style={styles.group}>
-            <View style={[styles.groupHeader, group.key === 'overdue' && styles.groupHeaderOverdue]}>
-              <Text style={[styles.groupLabel, group.key === 'overdue' && styles.groupLabelOverdue]}>
+            <View
+              style={[styles.groupHeader, group.key === 'overdue' && styles.groupHeaderOverdue]}>
+              <Text
+                style={[styles.groupLabel, group.key === 'overdue' && styles.groupLabelOverdue]}>
                 {group.label}
               </Text>
               <Text style={styles.groupCount}>{group.reminders.length}</Text>
@@ -113,7 +140,8 @@ export default function RemindersScreen() {
                 <ReminderRow
                   key={reminder.id}
                   reminder={reminder}
-                  onComplete={complete}
+                  onComplete={handleComplete}
+                  onPress={openReminder}
                   showDate={group.key === 'overdue'}
                   isLast={index === group.reminders.length - 1}
                 />
@@ -127,6 +155,28 @@ export default function RemindersScreen() {
 }
 
 const styles = StyleSheet.create({
+  // ----- Header -----
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  newButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    borderWidth: 2,
+    borderColor: Colors.ink,
+    backgroundColor: Colors.yellow,
+    alignItems: 'center',
+    justifyContent: 'center',
+    boxShadow: `3px 3px 0 ${Colors.ink}`,
+  },
+  newButtonPressed: {
+    transform: [{ translateX: 2 }, { translateY: 2 }],
+    boxShadow: `1px 1px 0 ${Colors.ink}`,
+  },
+
   hint: {
     marginTop: -10,
     marginLeft: 4,

@@ -5,8 +5,11 @@ import { Colors } from '@/constants/Colors';
 import { Fonts } from '@/constants/Fonts';
 
 type QuickAddReminderProps = {
-  /** Called with the trimmed title. The field is cleared once the promise resolves. */
-  onAdd: (title: string) => Promise<void>;
+  /**
+   * Called with the trimmed title. Resolves to true if the reminder was added:
+   * the field is then cleared, otherwise the text is kept so the user can try again.
+   */
+  onAdd: (title: string) => Promise<boolean>;
 };
 
 /** Title limit of the reminders table (1 to 50 characters). */
@@ -24,8 +27,8 @@ export default function QuickAddReminder({ onAdd }: QuickAddReminderProps) {
     if (!canAdd) return;
     setIsAdding(true);
     try {
-      await onAdd(trimmed);
-      setTitle('');
+      const isAdded = await onAdd(trimmed);
+      if (isAdded) setTitle('');
     } finally {
       setIsAdding(false);
     }
@@ -50,8 +53,11 @@ export default function QuickAddReminder({ onAdd }: QuickAddReminderProps) {
         disabled={!canAdd}
         accessibilityRole="button"
         accessibilityLabel="Add the reminder"
-        style={({ pressed }) => [styles.button, !canAdd && styles.buttonDisabled, pressed && styles.buttonPressed]}
-      >
+        style={({ pressed }) => [
+          styles.button,
+          !canAdd && styles.buttonDisabled,
+          pressed && styles.buttonPressed,
+        ]}>
         <Feather name="arrow-up" size={20} color={Colors.ink} />
       </Pressable>
     </View>

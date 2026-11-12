@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
+import { router } from 'expo-router';
 import DeviceRow from '@/components/DeviceRow';
 import Badge from '@/components/ui/Badge';
 import Button from '@/components/ui/Button';
@@ -9,11 +10,13 @@ import Screen from '@/components/ui/Screen';
 import ScreenHeader from '@/components/ui/ScreenHeader';
 import { Colors } from '@/constants/Colors';
 import { Fonts } from '@/constants/Fonts';
+import { useActionError } from '@/hooks/useActionError';
 import { useAuth } from '@/hooks/useAuth';
 import { useDevices } from '@/hooks/useDevices';
 import { useProfile } from '@/hooks/useProfile';
 import { signOut } from '@/services/auth';
 import { isDeviceOnline } from '@/services/devices';
+import type { DeviceSettings } from '@/types/models';
 
 /** "Camille Martin" → "CM", "camille" → "C". */
 function initials(name: string): string {
@@ -28,12 +31,16 @@ function initials(name: string): string {
 export default function SettingsScreen() {
   const { user } = useAuth();
   const { profile } = useProfile();
-  const { devices, error: devicesError, updateSettings } = useDevices();
+  const { devices, error: devicesError, update } = useDevices();
+  const { actionError, run } = useActionError();
   const [signOutError, setSignOutError] = useState<string | null>(null);
   const [isSigningOut, setIsSigningOut] = useState(false);
 
   const name = profile?.display_name ?? 'You';
   const onlineCount = devices.filter(isDeviceOnline).length;
+
+  const handleChangeSettings = (deviceId: string, settings: Partial<DeviceSettings>) =>
+    run(() => update(deviceId, { settings }), 'Could not save the setting. Try again.');
 
   const handleSignOut = async () => {
     setSignOutError(null);
@@ -70,21 +77,33 @@ export default function SettingsScreen() {
         </View>
 
         {devicesError && <Notice tone="error" message={devicesError} />}
+        {actionError && <Notice tone="error" message={actionError} />}
 
         {devices.length === 0 ? (
           <Text style={styles.empty}>
-            No device paired yet. Turn on your desk companion and follow its Wi-Fi setup page.
+            No device paired yet. Turn on your desk companion, then add it with its pairing code.
           </Text>
         ) : (
           devices.map((device, index) => (
             <DeviceRow
               key={device.id}
               device={device}
-              onChangeSettings={updateSettings}
+              onChangeSettings={handleChangeSettings}
+              onPress={(deviceId) =>
+                router.push({ pathname: '/devices/[id]', params: { id: deviceId } })
+              }
               isLast={index === devices.length - 1}
             />
           ))
         )}
+
+        <Button
+          label="Add a device"
+          icon="plus"
+          variant="secondary"
+          onPress={() => router.push('/devices/pair')}
+          style={styles.addDevice}
+        />
       </Card>
 
       {/* ----- Account ----- */}
@@ -151,6 +170,9 @@ const styles = StyleSheet.create({
     fontFamily: Fonts.title,
     fontSize: 22,
     color: Colors.ink,
+  },
+  addDevice: {
+    marginTop: 12,
   },
   empty: {
     marginTop: 8,

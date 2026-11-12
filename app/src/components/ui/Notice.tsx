@@ -14,7 +14,9 @@ export default function Notice({ message, tone }: NoticeProps) {
   const isError = tone === 'error';
 
   return (
-    <View style={[styles.box, isError ? styles.error : styles.success]} accessibilityLiveRegion="polite">
+    <View
+      style={[styles.box, isError ? styles.error : styles.success]}
+      accessibilityLiveRegion="polite">
       <Feather
         name={isError ? 'alert-circle' : 'check-circle'}
         size={18}

@@ -8,6 +8,8 @@ type ReminderRowProps = {
   reminder: Reminder;
   /** Called when the circle is pressed. Not called for a reminder already done. */
   onComplete: (reminderId: string) => void;
+  /** Called when the rest of the row is pressed (e.g. to open the edit screen). */
+  onPress?: (reminderId: string) => void;
   /** Shows the day next to the time (for lists that mix several days). */
   showDate?: boolean;
   /** Hides the bottom separator (for the last row of a list). */
@@ -30,7 +32,13 @@ function formatDay(iso: string): string {
 }
 
 /** One reminder in a list: a check circle, the title and the due time. */
-export default function ReminderRow({ reminder, onComplete, showDate = false, isLast = false }: ReminderRowProps) {
+export default function ReminderRow({
+  reminder,
+  onComplete,
+  onPress,
+  showDate = false,
+  isLast = false,
+}: ReminderRowProps) {
   const isDone = reminder.completed_at !== null;
   const isOverdue = !isDone && new Date(reminder.due_at) < new Date();
 
@@ -42,8 +50,7 @@ export default function ReminderRow({ reminder, onComplete, showDate = false, is
         hitSlop={10}
         accessibilityRole="checkbox"
         accessibilityLabel={`Mark "${reminder.title}" as done`}
-        accessibilityState={{ checked: isDone, disabled: isDone }}
-      >
+        accessibilityState={{ checked: isDone, disabled: isDone }}>
         {({ pressed }) => (
           <Feather
             name={isDone || pressed ? 'check-circle' : 'circle'}
@@ -53,36 +60,45 @@ export default function ReminderRow({ reminder, onComplete, showDate = false, is
         )}
       </Pressable>
 
-      <View style={styles.texts}>
-        <Text style={[styles.title, isDone && styles.titleDone]} numberOfLines={2}>
-          {reminder.title}
-        </Text>
+      <Pressable
+        onPress={onPress ? () => onPress(reminder.id) : undefined}
+        disabled={!onPress}
+        accessibilityRole={onPress ? 'button' : undefined}
+        accessibilityHint={onPress ? 'Opens the reminder' : undefined}
+        style={({ pressed }) => [styles.body, pressed && styles.bodyPressed]}>
+        <View style={styles.texts}>
+          <Text style={[styles.title, isDone && styles.titleDone]} numberOfLines={2}>
+            {reminder.title}
+          </Text>
 
-        {(reminder.recurrence || reminder.details) && (
-          <View style={styles.meta}>
-            {reminder.recurrence && (
-              <View style={styles.metaItem}>
-                <Feather name="repeat" size={11} color={Colors.teal} />
-                <Text style={styles.recurrence}>{RECURRENCE_LABELS[reminder.recurrence]}</Text>
-              </View>
-            )}
-            {reminder.details && (
-              <Text style={styles.details} numberOfLines={1}>
-                {reminder.details}
-              </Text>
-            )}
-          </View>
-        )}
-      </View>
+          {(reminder.recurrence || reminder.details) && (
+            <View style={styles.meta}>
+              {reminder.recurrence && (
+                <View style={styles.metaItem}>
+                  <Feather name="repeat" size={11} color={Colors.teal} />
+                  <Text style={styles.recurrence}>{RECURRENCE_LABELS[reminder.recurrence]}</Text>
+                </View>
+              )}
+              {reminder.details && (
+                <Text style={styles.details} numberOfLines={1}>
+                  {reminder.details}
+                </Text>
+              )}
+            </View>
+          )}
+        </View>
 
-      <View style={styles.when}>
-        <Text style={[styles.time, isOverdue && styles.overdue]}>{formatTime(reminder.due_at)}</Text>
-        {isOverdue ? (
-          <Text style={[styles.day, styles.overdue]}>Overdue</Text>
-        ) : (
-          showDate && <Text style={styles.day}>{formatDay(reminder.due_at)}</Text>
-        )}
-      </View>
+        <View style={styles.when}>
+          <Text style={[styles.time, isOverdue && styles.overdue]}>
+            {formatTime(reminder.due_at)}
+          </Text>
+          {isOverdue ? (
+            <Text style={[styles.day, styles.overdue]}>Overdue</Text>
+          ) : (
+            showDate && <Text style={styles.day}>{formatDay(reminder.due_at)}</Text>
+          )}
+        </View>
+      </Pressable>
     </View>
   );
 }
@@ -104,6 +120,15 @@ const styles = StyleSheet.create({
   },
 
   // ----- Title and meta -----
+  body: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  bodyPressed: {
+    opacity: 0.6,
+  },
   texts: {
     flex: 1,
     gap: 4,

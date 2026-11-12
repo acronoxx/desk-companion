@@ -19,8 +19,7 @@ export default function Toggle({ value, onChange, label, disabled = false }: Tog
       accessibilityRole="switch"
       accessibilityLabel={label}
       accessibilityState={{ checked: value, disabled }}
-      style={[styles.track, value && styles.trackOn, disabled && styles.disabled]}
-    >
+      style={[styles.track, value && styles.trackOn, disabled && styles.disabled]}>
       <View style={[styles.thumb, value && styles.thumbOn]} />
     </Pressable>
   );

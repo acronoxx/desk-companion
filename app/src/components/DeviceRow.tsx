@@ -1,4 +1,4 @@
-import { StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Feather from '@expo/vector-icons/Feather';
 import Toggle from '@/components/ui/Toggle';
 import { Colors } from '@/constants/Colors';
@@ -9,6 +9,8 @@ import type { Device, DeviceSettings } from '@/types/models';
 type DeviceRowProps = {
   device: Device;
   onChangeSettings: (deviceId: string, settings: Partial<DeviceSettings>) => void;
+  /** Called when the name is pressed (e.g. to open the device screen). */
+  onPress?: (deviceId: string) => void;
   /** Hides the bottom separator (for the last row of a list). */
   isLast?: boolean;
 };
@@ -26,24 +28,37 @@ function lastSeenLabel(device: Device): string {
 }
 
 /** A paired device: its status and the two alerts it can give (vibration and light). */
-export default function DeviceRow({ device, onChangeSettings, isLast = false }: DeviceRowProps) {
+export default function DeviceRow({
+  device,
+  onChangeSettings,
+  onPress,
+  isLast = false,
+}: DeviceRowProps) {
   const isOnline = isDeviceOnline(device);
 
   return (
     <View style={[styles.row, !isLast && styles.separator]}>
       {/* ----- Name and status ----- */}
-      <View style={styles.header}>
+      <Pressable
+        onPress={onPress ? () => onPress(device.id) : undefined}
+        disabled={!onPress}
+        accessibilityRole={onPress ? 'button' : undefined}
+        accessibilityHint={onPress ? 'Opens the device settings' : undefined}
+        style={({ pressed }) => [styles.header, pressed && styles.headerPressed]}>
         <View style={styles.icon}>
           <Feather name="box" size={20} color={Colors.ink} />
         </View>
         <View style={styles.texts}>
           <Text style={styles.name}>{device.name}</Text>
           <View style={styles.status}>
-            <View style={[styles.dot, { backgroundColor: isOnline ? Colors.green : Colors.disabled }]} />
+            <View
+              style={[styles.dot, { backgroundColor: isOnline ? Colors.green : Colors.disabled }]}
+            />
             <Text style={styles.statusText}>{isOnline ? 'Online' : lastSeenLabel(device)}</Text>
           </View>
         </View>
-      </View>
+        {onPress && <Feather name="chevron-right" size={20} color={Colors.textMuted} />}
+      </Pressable>
 
       {/* ----- Alerts ----- */}
       <View style={styles.options}>
@@ -85,6 +100,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
+  },
+  headerPressed: {
+    opacity: 0.6,
   },
   icon: {
     width: 42,

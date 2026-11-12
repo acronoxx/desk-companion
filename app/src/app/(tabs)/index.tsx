@@ -9,6 +9,7 @@ import ScreenHeader from '@/components/ui/ScreenHeader';
 import TextLink from '@/components/ui/TextLink';
 import { Colors } from '@/constants/Colors';
 import { Fonts } from '@/constants/Fonts';
+import { useActionError } from '@/hooks/useActionError';
 import { useDevices } from '@/hooks/useDevices';
 import { useProfile } from '@/hooks/useProfile';
 import { useReminders } from '@/hooks/useReminders';
@@ -35,13 +36,23 @@ export default function HomeScreen() {
   const { profile } = useProfile();
   const { reminders, error, complete } = useReminders();
   const { devices } = useDevices();
+  const { actionError, run } = useActionError();
+
+  const handleComplete = (reminderId: string) =>
+    run(() => complete(reminderId), 'Could not mark the reminder as done.');
+  const openReminder = (reminderId: string) =>
+    router.push({ pathname: '/reminders/[id]', params: { id: reminderId } });
 
   const open = reminders.filter((reminder) => reminder.completed_at === null);
   const [next, ...upcoming] = open; // the list is sorted by due date
   const leftToday = open.filter((reminder) => isToday(reminder.due_at)).length;
   const onlineCount = devices.filter(isDeviceOnline).length;
 
-  const today = new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
+  const today = new Date().toLocaleDateString('en-GB', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+  });
   const name = profile?.display_name;
 
   return (
@@ -49,6 +60,7 @@ export default function HomeScreen() {
       <ScreenHeader eyebrow={today} title={name ? `${greeting()}, ${name}` : greeting()} />
 
       {error && <Notice tone="error" message={error} />}
+      {actionError && <Notice tone="error" message={actionError} />}
 
       {/* ----- The next thing to do ----- */}
       {next ? (
@@ -62,18 +74,19 @@ export default function HomeScreen() {
               {next.title}
             </Text>
             <Pressable
-              onPress={() => complete(next.id)}
+              onPress={() => handleComplete(next.id)}
               accessibilityRole="button"
               accessibilityLabel={`Mark "${next.title}" as done`}
-              style={({ pressed }) => [styles.doneButton, pressed && styles.doneButtonPressed]}
-            >
+              style={({ pressed }) => [styles.doneButton, pressed && styles.doneButtonPressed]}>
               <Feather name="check" size={26} color={Colors.white} />
             </Pressable>
           </View>
           <View style={styles.focusFooter}>
             <Feather name="clock" size={14} color={Colors.teal} />
             <Text style={styles.focusFooterText}>
-              {isToday(next.due_at) ? 'Today' : new Date(next.due_at).toLocaleDateString('en-GB', { weekday: 'long' })}{' '}
+              {isToday(next.due_at)
+                ? 'Today'
+                : new Date(next.due_at).toLocaleDateString('en-GB', { weekday: 'long' })}{' '}
               at {formatTime(next.due_at)}
               {next.details ? ` · ${next.details}` : ''}
             </Text>
@@ -100,7 +113,8 @@ export default function HomeScreen() {
             <ReminderRow
               key={reminder.id}
               reminder={reminder}
-              onComplete={complete}
+              onComplete={handleComplete}
+              onPress={openReminder}
               showDate={!isToday(reminder.due_at)}
               isLast={index === shown.length - 1}
             />
@@ -127,7 +141,9 @@ export default function HomeScreen() {
                   : `${onlineCount} of ${devices.length} device${devices.length > 1 ? 's' : ''} online`}
               </Text>
               <Text style={styles.devicesSubtitle}>
-                {devices.length === 0 ? 'Pair your desk companion in Settings' : 'Manage alerts in Settings'}
+                {devices.length === 0
+                  ? 'Pair your desk companion in Settings'
+                  : 'Manage alerts in Settings'}
               </Text>
             </View>
             <Feather name="chevron-right" size={20} color={Colors.textMuted} />

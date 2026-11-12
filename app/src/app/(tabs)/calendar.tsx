@@ -1,17 +1,21 @@
 import { useState } from 'react';
 import { StyleSheet, Text } from 'react-native';
+import { router } from 'expo-router';
 import MonthCalendar from '@/components/MonthCalendar';
 import ReminderRow from '@/components/ReminderRow';
 import Card from '@/components/ui/Card';
+import Notice from '@/components/ui/Notice';
 import Screen from '@/components/ui/Screen';
 import ScreenHeader from '@/components/ui/ScreenHeader';
 import TextLink from '@/components/ui/TextLink';
 import { Colors } from '@/constants/Colors';
 import { Fonts } from '@/constants/Fonts';
+import { useActionError } from '@/hooks/useActionError';
 import { useReminders } from '@/hooks/useReminders';
 
 export default function CalendarScreen() {
-  const { reminders, complete } = useReminders();
+  const { reminders, error, complete } = useReminders();
+  const { actionError, run } = useActionError();
   const [month, setMonth] = useState(() => new Date());
   const [selected, setSelected] = useState(() => new Date());
 
@@ -34,6 +38,9 @@ export default function CalendarScreen() {
     setMonth((current) => new Date(current.getFullYear(), current.getMonth() + delta, 1));
   };
 
+  const handleComplete = (reminderId: string) =>
+    run(() => complete(reminderId), 'Could not mark the reminder as done.');
+
   const goToToday = () => {
     setMonth(new Date());
     setSelected(new Date());
@@ -46,6 +53,8 @@ export default function CalendarScreen() {
         title="Calendar"
         right={isViewingToday ? null : <TextLink label="Today" onPress={goToToday} />}
       />
+
+      {error && <Notice tone="error" message={error} />}
 
       <Card>
         <MonthCalendar
@@ -67,6 +76,8 @@ export default function CalendarScreen() {
             : `${ofSelectedDay.length} reminder${ofSelectedDay.length > 1 ? 's' : ''}`}
         </Text>
 
+        {actionError && <Notice tone="error" message={actionError} />}
+
         {ofSelectedDay.length === 0 ? (
           <Text style={styles.empty}>Nothing planned. The day is yours.</Text>
         ) : (
@@ -74,7 +85,10 @@ export default function CalendarScreen() {
             <ReminderRow
               key={reminder.id}
               reminder={reminder}
-              onComplete={complete}
+              onComplete={handleComplete}
+              onPress={(reminderId) =>
+                router.push({ pathname: '/reminders/[id]', params: { id: reminderId } })
+              }
               isLast={index === ofSelectedDay.length - 1}
             />
           ))

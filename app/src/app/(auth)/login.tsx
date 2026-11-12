@@ -49,8 +49,7 @@ export default function LoginScreen() {
           <Text style={styles.switchText}>New here?</Text>
           <TextLink label="Create an account" onPress={() => router.replace('/signup')} />
         </View>
-      }
-    >
+      }>
       {error && <Notice tone="error" message={error} />}
 
       <TextField

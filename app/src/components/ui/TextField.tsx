@@ -13,7 +13,12 @@ type TextFieldProps = Omit<TextInputProps, 'style' | 'secureTextEntry'> & {
 };
 
 /** A labelled text input. Every other prop is passed to the TextInput. */
-export default function TextField({ label, error, password = false, ...inputProps }: TextFieldProps) {
+export default function TextField({
+  label,
+  error,
+  password = false,
+  ...inputProps
+}: TextFieldProps) {
   const [isFocused, setIsFocused] = useState(false);
   const [isHidden, setIsHidden] = useState(password);
 
@@ -42,8 +47,7 @@ export default function TextField({ label, error, password = false, ...inputProp
             hitSlop={10}
             accessibilityRole="button"
             accessibilityLabel={isHidden ? 'Show password' : 'Hide password'}
-            style={styles.eye}
-          >
+            style={styles.eye}>
             <Feather name={isHidden ? 'eye' : 'eye-off'} size={18} color={Colors.textMuted} />
           </Pressable>
         )}

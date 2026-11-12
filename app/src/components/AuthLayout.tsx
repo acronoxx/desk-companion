@@ -21,12 +21,13 @@ type AuthLayoutProps = {
 export default function AuthLayout({ title, children, footer }: AuthLayoutProps) {
   return (
     <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right', 'bottom']}>
-      <KeyboardAvoidingView style={styles.fill} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <KeyboardAvoidingView
+        style={styles.fill}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView
           contentContainerStyle={styles.scroll}
           keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-        >
+          showsVerticalScrollIndicator={false}>
           {/* ----- Hero ----- */}
           <View style={styles.hero}>
             <View style={[styles.bubble, styles.bubbleBig]} />

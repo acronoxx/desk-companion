@@ -32,7 +32,13 @@ function monthCells(month: Date): (Date | null)[] {
 }
 
 /** A month grid: arrows to change month, a dot under the days that have reminders. */
-export default function MonthCalendar({ month, selected, onSelect, onChangeMonth, markedDays }: MonthCalendarProps) {
+export default function MonthCalendar({
+  month,
+  selected,
+  onSelect,
+  onChangeMonth,
+  markedDays,
+}: MonthCalendarProps) {
   const todayKey = new Date().toDateString();
   const selectedKey = selected.toDateString();
   const title = month.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
@@ -69,11 +75,15 @@ export default function MonthCalendar({ month, selected, onSelect, onChangeMonth
               key={key}
               onPress={() => onSelect(day)}
               accessibilityRole="button"
-              accessibilityLabel={day.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })}
+              accessibilityLabel={day.toLocaleDateString('en-GB', {
+                weekday: 'long',
+                day: 'numeric',
+                month: 'long',
+              })}
               accessibilityState={{ selected: isSelected }}
-              style={styles.cell}
-            >
-              <View style={[styles.day, isToday && styles.dayToday, isSelected && styles.daySelected]}>
+              style={styles.cell}>
+              <View
+                style={[styles.day, isToday && styles.dayToday, isSelected && styles.daySelected]}>
                 <Text style={[styles.dayText, isToday && !isSelected && styles.dayTextToday]}>
                   {day.getDate()}
                 </Text>
@@ -100,8 +110,7 @@ function ArrowButton({ icon, label, onPress }: ArrowButtonProps) {
       accessibilityRole="button"
       accessibilityLabel={label}
       hitSlop={6}
-      style={({ pressed }) => [styles.arrow, pressed && styles.arrowPressed]}
-    >
+      style={({ pressed }) => [styles.arrow, pressed && styles.arrowPressed]}>
       <Feather name={icon} size={20} color={Colors.ink} />
     </Pressable>
   );
