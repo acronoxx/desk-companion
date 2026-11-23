@@ -5,7 +5,9 @@
 #include "secrets.h"
 #include "config.h"
 
-bool isRegistered = false;
+bool isPaired = false;
+bool hasAskedPairing = false;
+uint32_t lastPairingTime = 0;
 bool hasSynced = false;
 uint32_t lastUpdateTime = 0;
 
@@ -13,10 +15,13 @@ void setup() {
     Serial.begin(115200);
     delay(1000); // Wait for serial to initialize
 
-    bool isConnected = connectWifi();
+    // Before the Wi-Fi: the setup portal shows the pairing code.
+    syncBegin();
+
+    bool isConnected = connectWifi(getPairingCode());
     while (!isConnected) {
         Serial.println("Wi-Fi setup portal timed out, retrying...");
-        isConnected = connectWifi();
+        isConnected = connectWifi(getPairingCode());
     }
     Serial.println("Connected to Wi-Fi");
 
@@ -27,14 +32,37 @@ void setup() {
         isSynced = syncTime(NTP_TIMEOUT_MS);
     }
     Serial.println("Time synced with NTP server");
-
-    syncBegin();
 }
 
 void loop() {
-    // Every SYNC_INTERVAL_MS (and right away the first time).
+    pairingPortalLoop();
+
+    // Until a user pairs the device: ask device-register every PAIRING_POLL_MS
+    // (right away the first time). Meanwhile the access point stays open,
+    // so the user can read the pairing code on its page.
     // If the Wi-Fi dropped, it reconnects by itself (setAutoReconnect): just wait.
-    if (isWifiConnected() && (!hasSynced || millis() - lastUpdateTime >= SYNC_INTERVAL_MS)) {
+    if (!isPaired && isWifiConnected() &&
+        (!hasAskedPairing || millis() - lastPairingTime >= PAIRING_POLL_MS)) {
+        hasAskedPairing = true;
+        lastPairingTime = millis();
+
+        bool paired = false;
+        if (registerDevice(paired)) {
+            if (paired) {
+                isPaired = true;
+                stopPairingPortal();
+                Serial.println("Device paired");
+            } else {
+                startPairingPortal(getPairingCode());
+            }
+        } else {
+            Serial.println("Failed to register device");
+        }
+    }
+
+    // Once paired: every SYNC_INTERVAL_MS (and right away the first time).
+    if (isPaired && isWifiConnected() &&
+        (!hasSynced || millis() - lastUpdateTime >= SYNC_INTERVAL_MS)) {
         hasSynced = true;
         lastUpdateTime = millis();
 
@@ -46,21 +74,13 @@ void loop() {
             Serial.println("Failed to sync time with NTP server");
         }
 
-        // Register the device (only until it succeeds once per boot)
-        if (!isRegistered) {
-            isRegistered = registerDevice();
-            Serial.println(isRegistered ? "Device registered" : "Failed to register device");
-        }
-
         // Update reminders
-        if (isRegistered) {
-            bool updated = updateReminders();
-            if (updated) {
-                Serial.println("Reminders updated");
-                printReminders();
-            } else {
-                Serial.println("Failed to update reminders");
-            }
+        bool updated = updateReminders();
+        if (updated) {
+            Serial.println("Reminders updated");
+            printReminders();
+        } else {
+            Serial.println("Failed to update reminders");
         }
     }
 

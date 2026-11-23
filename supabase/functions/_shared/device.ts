@@ -8,6 +8,7 @@ export type Device = {
   user_id: string | null; // null until the device is paired with a user
   settings: Record<string, unknown>;
   secret_hash: string;
+  pairing_code: string | null; // null once paired
 };
 
 // The two headers every device request carries.
@@ -34,7 +35,7 @@ export async function sha256Hex(text: string): Promise<string> {
 export async function findDevice(admin: SupabaseClient, serial: string): Promise<Device | null> {
   const { data, error } = await admin
     .from("devices")
-    .select("id, user_id, settings, secret_hash")
+    .select("id, user_id, settings, secret_hash, pairing_code")
     .eq("serial_number", serial)
     .maybeSingle();
   if (error) throw error;

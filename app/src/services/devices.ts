@@ -1,8 +1,9 @@
+import { FunctionsHttpError } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
 import type { Tables } from '../types/database';
 import type { Device, DeviceSettings } from '../types/models';
 
-/** Every column except secret_hash, which must never reach the app. */
+/** Every column except secret_hash (must never reach the app) and pairing_code (only for device-claim). */
 const DEVICE_COLUMNS = 'id, user_id, serial_number, name, settings, last_seen_at, created_at';
 
 /**
@@ -10,7 +11,7 @@ const DEVICE_COLUMNS = 'id, user_id, serial_number, name, settings, last_seen_at
  * settings is typed Json by the generated types: the database only checks it is an object,
  * so the cast trusts the app and the ESP32 to write the DeviceSettings shape.
  */
-function toDevice(row: Omit<Tables<'devices'>, 'secret_hash'>): Device {
+function toDevice(row: Omit<Tables<'devices'>, 'secret_hash' | 'pairing_code'>): Device {
   return { ...row, settings: row.settings as DeviceSettings };
 }
 
@@ -20,11 +21,20 @@ function toDevice(row: Omit<Tables<'devices'>, 'secret_hash'>): Device {
  *
  * @param code - The pairing code shown on the device's Wi-Fi setup page.
  * @param name - The name given to the device.
- * @returns The created device.
- * @throws Always, for now: not implemented yet.
+ * @returns The paired device.
+ * @throws With a message to show if the code matches no waiting device or the network fails.
  */
 export async function claimDevice(code: string, name: string): Promise<Device> {
-  throw new Error('Not implemented yet');
+  const { data, error } = await supabase.functions.invoke<
+    Omit<Tables<'devices'>, 'secret_hash' | 'pairing_code'>
+  >('device-claim', { body: { code, name } });
+  if (error || !data) {
+    // The function answers { error } with a readable message.
+    const body =
+      error instanceof FunctionsHttpError ? await error.context.json().catch(() => null) : null;
+    throw new Error(body?.error ?? 'Could not pair the device.');
+  }
+  return toDevice(data);
 }
 
 /**

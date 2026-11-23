@@ -35,7 +35,7 @@ export type DeviceSettings = {
 };
 
 /** A device as the app sees it: no secret, typed settings. user_id is null until paired. */
-export type Device = Omit<Tables<'devices'>, 'secret_hash' | 'settings'> & {
+export type Device = Omit<Tables<'devices'>, 'secret_hash' | 'pairing_code' | 'settings'> & {
   settings: DeviceSettings;
 };
 

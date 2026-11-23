@@ -57,18 +57,19 @@ sequenceDiagram
     participant A as App
 
     E->>E: first boot: generates a random secret key + a 6-digit pairing code, stores them (NVS)
-    E->>E: no Wi-Fi → access point "DeskCompanion-XXXX"
+    E->>E: no Wi-Fi → access point "DeskCompanion-XXXX" (already set up: opened after the first device-register)
     U->>E: connects with the phone, the setup page (WiFiManager) shows the code 482913
     U->>E: picks their Wi-Fi in the same page
-    E->>F: device-register { serial_number, secret, pairing_code }
+    E->>F: device-register (headers x-device-serial, x-device-secret, x-device-pairing-code)
+    F->>F: creates the devices row (serial_number, secret_hash, pairing_code, user_id = null)
     F-->>E: { paired: false }
     U->>A: "Add a device" → types 482913 + a name
     A->>F: device-claim { code, name } (with the user's JWT)
-    F->>F: creates the devices row (user_id, serial_number, secret_hash)
-    F-->>A: the created device
+    F->>F: finds the row waiting with this code, sets user_id + name, clears pairing_code
+    F-->>A: the paired device
     E->>F: device-register (re-polls every 5 s)
     F-->>E: { paired: true }
-    E->>E: switches to normal mode
+    E->>E: closes the access point, switches to normal mode
 ```
 
 ### 2. Syncing reminders
@@ -105,9 +106,7 @@ The device sees it at its next sync (at most 30 s later): the reminder is gone f
 
 ## Database
 
-See `database/schema.md`. Done: `devices.secret_hash` (authenticates the ESP32), a nullable `devices.user_id` (the ESP32 registers itself before being paired), the full default of `devices.settings`, `reminders.recurrence_days` (repeat on chosen days of the week), and the `complete_reminder(reminder_id uuid, time_zone text)` function. Still to add:
-
-- pairing (code typed in the app → sets `devices.user_id`).
+See `database/schema.md`. Done: `devices.secret_hash` (authenticates the ESP32), a nullable `devices.user_id` (the ESP32 registers itself before being paired), the full default of `devices.settings`, `reminders.recurrence_days` (repeat on chosen days of the week), the `complete_reminder(reminder_id uuid, time_zone text)` function and `devices.pairing_code` (pairing, migration 003).
 
 `database/schema.sql` creates a new database. A database created with an older version is updated with the files of `database/migrations/`, run once each, in order, in the SQL Editor.
 
@@ -117,8 +116,8 @@ Folder: `supabase/functions/<name>/index.ts`, shared code in `supabase/functions
 
 | Function | Called by | Auth | Input | Output |
 |---|---|---|---|---|
-| `device-register` | ESP32 | `apikey` + `x-device-serial` + `x-device-secret` (first contact: creates the row) | — (POST) | `{ registered: true, paired }`, `409` if the serial is known with another secret. Pairing code: to add |
-| `device-claim` | App | user JWT | `{ code, name }` | the created `devices` row |
+| `device-register` | ESP32 | `apikey` + `x-device-serial` + `x-device-secret` (first contact: creates the row) | — (POST) | `{ registered: true, paired }`, `409` if the serial is known with another secret. Also sends `x-device-pairing-code` (6 digits), stored until the device is paired |
+| `device-claim` | App | user JWT | `{ code, name }` | the paired `devices` row (`404` if no device waits with this code) |
 | `device-sync` | ESP32 | `apikey` + `x-device-serial` + `x-device-secret` | — | `{ server_time, settings, reminders: [{ id, title, remind_at }] }` — times in **Unix seconds** (UTC), not ISO strings, so the ESP32 has no date parsing to do |
 
 The two device functions (`device-register`, `device-sync`) are deployed with `verify_jwt = false` (in `supabase/config.toml`): the ESP32 has no user JWT. They use `withSupabase({ auth: "publishable" })` from `@supabase/server`: the `apikey` header must be the project's publishable key (not secret, it only filters unknown clients), then the functions check the device secret themselves and read the database with `ctx.supabaseAdmin` (service role).
@@ -227,7 +226,7 @@ getProfile(userId): Promise<Profile>
 updateProfile(userId, updates: { display_name }): Promise<Profile>
 
 // services/devices.ts
-claimDevice(code, name): Promise<Device>                                   // → Edge Function device-claim (not written yet)
+claimDevice(code, name): Promise<Device>                                   // → Edge Function device-claim
 getDevices(userId): Promise<Device[]>                                      // sorted by name, never returns secret_hash
 getDevice(userId, deviceId): Promise<Device>
 updateDevice(userId, deviceId, { name?, settings?: Partial<DeviceSettings> }): Promise<Device>  // settings merged

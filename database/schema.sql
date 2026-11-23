@@ -52,6 +52,9 @@ create table public.devices (
   name          text not null default 'My desk companion',
   serial_number text not null unique,   -- e.g. the ESP32 MAC address
   secret_hash   text not null,          -- sha256 (hex) of the secret the ESP32 generated itself
+  -- 6 digits the ESP32 generated itself and shows on its Wi-Fi setup page.
+  -- The user types it in the app (device-claim), which sets user_id and clears it.
+  pairing_code  text unique check (pairing_code ~ '^[0-9]{6}$'),
   last_seen_at  timestamptz,            -- updated every time the ESP32 connects
   -- Settings edited in the app, read by the ESP32. Same keys as DeviceSettings in
   -- app/src/types/models.ts: every key must be in the default, the app expects all of them.

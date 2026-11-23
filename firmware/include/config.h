@@ -33,6 +33,7 @@ constexpr uint8_t  PWM_RESOLUTION    = 8;     // bits: duty from 0 to 255
 
 // Sync configuration
 constexpr uint32_t SYNC_INTERVAL_MS = 30000; // how often the device asks for its reminders
+constexpr uint32_t PAIRING_POLL_MS  = 5000;  // how often an unpaired device asks if it was paired
 constexpr uint16_t HTTP_TIMEOUT_MS  = 5000;  // max wait for the server's answer
 constexpr size_t   MAX_REMINDERS    = 20;    // reminders kept in RAM
 

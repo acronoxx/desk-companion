@@ -45,6 +45,7 @@ export type Database = {
           id: string
           last_seen_at: string | null
           name: string
+          pairing_code: string | null
           secret_hash: string
           serial_number: string
           settings: Json
@@ -55,6 +56,7 @@ export type Database = {
           id?: string
           last_seen_at?: string | null
           name?: string
+          pairing_code?: string | null
           secret_hash: string
           serial_number: string
           settings?: Json
@@ -65,6 +67,7 @@ export type Database = {
           id?: string
           last_seen_at?: string | null
           name?: string
+          pairing_code?: string | null
           secret_hash?: string
           serial_number?: string
           settings?: Json

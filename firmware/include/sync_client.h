@@ -7,16 +7,22 @@
 //   apikey          : the publishable key (proves the request comes from our clients)
 //   x-device-serial : the ESP32 MAC address (who the device is)
 //   x-device-secret : a random secret generated on first boot (proves it is really this device)
+//   x-device-pairing-code : the 6 digits the user types in the app to pair the device
 
-// Loads the device secret from flash, or generates and saves one on first boot.
-// Call once in setup(), after the Wi-Fi is connected (the hardware random
-// generator is only truly random while the radio is on).
+// Loads the device secret and pairing code from flash, or generates and saves them
+// on first boot. Call once at the start of setup(), before connectWifi(): the code is
+// shown on the Wi-Fi setup portal. Turns the radio on (WIFI_MODE) first, because the
+// hardware random generator is only truly random while it is on.
 void syncBegin();
+
+// The 6-digit pairing code ("042917"). Valid after syncBegin().
+const char *getPairingCode();
 
 // Calls device-register: creates this device's row on first boot,
 // or checks that the server already knows it with this secret.
+// Sets `paired` to true once a user typed the pairing code in the app.
 // Returns true if the device is registered.
-bool registerDevice();
+bool registerDevice(bool &paired);
 
 // Sends GET device-sync.
 // Fills `body` with the response and returns true on HTTP 200,

@@ -8,15 +8,20 @@
 #include "config.h"
 #include "secrets.h"
 
-// Where the secret is kept in flash (NVS). It survives reboots and re-flashing
-// the firmware, but not a full flash erase (pio run -t erase).
+// Where the secret and the pairing code are kept in flash (NVS). They survive reboots
+// and re-flashing the firmware, but not a full flash erase (pio run -t erase).
 static const char *NVS_NAMESPACE = "device";
 static const char *NVS_SECRET    = "secret";
+static const char *NVS_PAIRING   = "pairing";
 static const size_t SECRET_BYTES = 32;
+static const uint32_t PAIRING_CODE_RANGE = 1000000; // 6 digits: 000000 to 999999
 
 static String deviceSecret;
+static char pairingCode[7]; // 6 digits + '\0'
 
 void syncBegin() {
+    WiFi.mode(WIFI_MODE); // radio on: esp_random() needs it to be truly random
+
     Preferences prefs;
     prefs.begin(NVS_NAMESPACE, false);
     deviceSecret = prefs.getString(NVS_SECRET, "");
@@ -30,10 +35,27 @@ void syncBegin() {
         prefs.putString(NVS_SECRET, deviceSecret);
         Serial.println("New device secret generated");
     }
+
+    String savedCode = prefs.getString(NVS_PAIRING, "");
+    if (savedCode.length() == sizeof(pairingCode) - 1) {
+        strlcpy(pairingCode, savedCode.c_str(), sizeof(pairingCode));
+    } else {
+        // The modulo bias (2^32 is not a multiple of 10^6) is negligible here.
+        snprintf(pairingCode, sizeof(pairingCode), "%06lu",
+                 (unsigned long)(esp_random() % PAIRING_CODE_RANGE));
+        prefs.putString(NVS_PAIRING, pairingCode);
+        Serial.println("New pairing code generated");
+    }
     prefs.end();
 
     Serial.print("Device serial: ");
     Serial.println(WiFi.macAddress());
+    Serial.print("Pairing code: ");
+    Serial.println(pairingCode);
+}
+
+const char *getPairingCode() {
+    return pairingCode;
 }
 
 // Sends a request to an Edge Function with the device headers.
@@ -59,6 +81,7 @@ static int deviceRequest(const char *path, bool post, String *body) {
     http.addHeader("apikey", SUPABASE_PUBLISHABLE_KEY);
     http.addHeader("x-device-serial", WiFi.macAddress());
     http.addHeader("x-device-secret", deviceSecret);
+    http.addHeader("x-device-pairing-code", pairingCode);
 
     int code = post ? http.POST("") : http.GET();
     if (code == HTTP_CODE_OK) {
@@ -77,8 +100,20 @@ static int deviceRequest(const char *path, bool post, String *body) {
     return code;
 }
 
-bool registerDevice() {
-    return deviceRequest(REGISTER_PATH, true, nullptr) == HTTP_CODE_OK;
+bool registerDevice(bool &paired) {
+    String body;
+    if (deviceRequest(REGISTER_PATH, true, &body) != HTTP_CODE_OK) {
+        return false;
+    }
+
+    JsonDocument doc;
+    DeserializationError err = deserializeJson(doc, body);
+    if (err) {
+        Serial.printf("device-register: invalid JSON (%s)\n", err.c_str());
+        return false;
+    }
+    paired = doc["paired"] | false;
+    return true;
 }
 
 bool fetchSyncJson(String &body) {

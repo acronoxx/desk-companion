@@ -31,6 +31,7 @@ erDiagram
         text name
         text serial_number UK "ESP32 MAC address"
         text secret_hash "sha256 of the device secret"
+        text pairing_code UK "6 digits, null once paired"
         timestamptz last_seen_at
         jsonb settings "settings: vibration intensity..."
         timestamptz created_at
@@ -140,11 +141,11 @@ Each user can only read and change their own rows (Row Level Security).
 
 ## Device registration
 
-On first boot, the ESP32 generates a random secret, keeps it in its flash memory, and calls `device-register`. The function creates the `devices` row with `user_id = null` and `secret_hash = sha256(secret)`: the secret itself is never stored. A row with `user_id = null` is invisible in the app (RLS).
+On first boot, the ESP32 generates a random secret and a 6-digit pairing code, keeps them in its flash memory, and calls `device-register`. The function creates the `devices` row with `user_id = null`, `pairing_code` and `secret_hash = sha256(secret)`: the secret itself is never stored. A row with `user_id = null` is invisible in the app (RLS).
 
 Every later request (`device-sync`) is accepted only if `sha256(x-device-secret)` matches `secret_hash`.
 
-Until pairing exists, link a device to a user by setting its `user_id` by hand in Supabase (Table Editor or SQL Editor), which bypasses RLS.
+Pairing: the ESP32 shows its code on its Wi-Fi setup page (title of the home page). The user types it in the app, `device-claim` finds the row with this code and `user_id = null`, sets `user_id` and `name`, and clears `pairing_code` so it can't be used twice. Until then the ESP32 calls `device-register` every 5 s and keeps its access point open. If the user deletes the device in the app, the row is gone: at its next boot the ESP32 registers again with the same code and can be paired again.
 
 If the ESP32's flash is fully erased, it generates a new secret and `device-register` answers `409`: delete the device's row so it can register again.
 
