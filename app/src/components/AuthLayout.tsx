@@ -1,9 +1,10 @@
 import type { ReactNode } from 'react';
 import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import Brand from '@/components/ui/Brand';
 import { Colors } from '@/constants/Colors';
 import { Fonts } from '@/constants/Fonts';
+import { useLanguage } from '@/hooks/useLanguage';
 
 type AuthLayoutProps = {
   /** Title inside the card, e.g. "Log in". */
@@ -19,14 +20,21 @@ type AuthLayoutProps = {
  * and the slogan, then the form in a card that overlaps it.
  */
 export default function AuthLayout({ title, children, footer }: AuthLayoutProps) {
+  const { t } = useLanguage();
+  const insets = useSafeAreaInsets();
   return (
-    <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right', 'bottom']}>
+    // Aqua only behind the status bar (it continues the hero band). The bottom safe area is not
+    // padded here, or it would show aqua under the page: the scroll content takes it instead.
+    <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
       <KeyboardAvoidingView
         style={styles.fill}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView
-          contentContainerStyle={styles.scroll}
+          style={styles.scrollArea}
+          contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom }]}
           keyboardShouldPersistTaps="handled"
+          // iOS bounces even when everything fits: only scroll when there is more to see.
+          alwaysBounceVertical={false}
           showsVerticalScrollIndicator={false}>
           {/* ----- Hero ----- */}
           <View style={styles.hero}>
@@ -34,7 +42,8 @@ export default function AuthLayout({ title, children, footer }: AuthLayoutProps)
             <View style={[styles.bubble, styles.bubbleSmall]} />
             <Brand size={44} />
             <Text style={styles.slogan}>
-              Never miss{'\n'}a <Text style={styles.sloganAccent}>task.</Text>
+              {t.auth.sloganStart}
+              <Text style={styles.sloganAccent}>{t.auth.sloganAccent}</Text>
             </Text>
           </View>
 
@@ -60,6 +69,10 @@ const styles = StyleSheet.create({
   },
   fill: {
     flex: 1,
+  },
+  // Page color behind everything below the hero, down to the bottom edge of the screen.
+  scrollArea: {
+    backgroundColor: Colors.bg,
   },
   scroll: {
     flexGrow: 1,

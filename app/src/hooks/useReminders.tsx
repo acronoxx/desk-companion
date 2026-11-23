@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useState, type ReactNode } from '
 import { AppState } from 'react-native';
 import type { Reminder, ReminderInput } from '@/types/models';
 import { useAuth } from './useAuth';
+import { useLanguage } from './useLanguage';
 import {
   completeReminder,
   createReminder,
@@ -56,7 +57,10 @@ export function RemindersProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   const [reminders, setReminders] = useState<Reminder[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const { t } = useLanguage();
+  /** The message is picked at render time, so it follows the language. */
+  const [hasError, setHasError] = useState(false);
+  const error = hasError ? t.reminders.loadError : null;
   /** Changing this number runs the loading effect again. */
   const [reloadCount, setReloadCount] = useState(0);
   const userId = user?.id;
@@ -70,7 +74,7 @@ export function RemindersProvider({ children }: { children: ReactNode }) {
 
     const load = async () => {
       // isLoading is only true for the first load: a refresh keeps the current list on screen.
-      setError(null);
+      setHasError(false);
 
       try {
         // true: the Done filter and the calendar need the completed reminders too.
@@ -80,7 +84,7 @@ export function RemindersProvider({ children }: { children: ReactNode }) {
         }
       } catch {
         if (!isCancelled) {
-          setError('Could not load your reminders.');
+          setHasError(true);
         }
       } finally {
         if (!isCancelled) {

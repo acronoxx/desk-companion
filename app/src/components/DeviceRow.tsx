@@ -3,6 +3,8 @@ import Feather from '@expo/vector-icons/Feather';
 import Toggle from '@/components/ui/Toggle';
 import { Colors } from '@/constants/Colors';
 import { Fonts } from '@/constants/Fonts';
+import { useLanguage } from '@/hooks/useLanguage';
+import type { Strings } from '@/i18n/en';
 import { isDeviceOnline } from '@/services/devices';
 import type { Device, DeviceSettings } from '@/types/models';
 
@@ -16,15 +18,15 @@ type DeviceRowProps = {
 };
 
 /** Tells how long ago a device synced, e.g. "Seen 2 days ago". */
-function lastSeenLabel(device: Device): string {
-  if (!device.last_seen_at) return 'Never connected';
+function lastSeenLabel(device: Device, t: Strings['devices']): string {
+  if (!device.last_seen_at) return t.neverConnected;
 
   const minutes = Math.round((Date.now() - new Date(device.last_seen_at).getTime()) / 60_000);
-  if (minutes < 60) return `Seen ${minutes} min ago`;
+  if (minutes < 60) return t.seenMinutes(minutes);
   const hours = Math.round(minutes / 60);
-  if (hours < 24) return `Seen ${hours} h ago`;
+  if (hours < 24) return t.seenHours(hours);
   const days = Math.round(hours / 24);
-  return `Seen ${days} day${days > 1 ? 's' : ''} ago`;
+  return t.seenDays(days);
 }
 
 /** A paired device: its status and the two alerts it can give (vibration and light). */
@@ -34,6 +36,7 @@ export default function DeviceRow({
   onPress,
   isLast = false,
 }: DeviceRowProps) {
+  const { t } = useLanguage();
   const isOnline = isDeviceOnline(device);
 
   return (
@@ -43,7 +46,7 @@ export default function DeviceRow({
         onPress={onPress ? () => onPress(device.id) : undefined}
         disabled={!onPress}
         accessibilityRole={onPress ? 'button' : undefined}
-        accessibilityHint={onPress ? 'Opens the device settings' : undefined}
+        accessibilityHint={onPress ? t.devices.opensSettings : undefined}
         style={({ pressed }) => [styles.header, pressed && styles.headerPressed]}>
         <View style={styles.icon}>
           <Feather name="box" size={20} color={Colors.ink} />
@@ -54,7 +57,9 @@ export default function DeviceRow({
             <View
               style={[styles.dot, { backgroundColor: isOnline ? Colors.green : Colors.disabled }]}
             />
-            <Text style={styles.statusText}>{isOnline ? 'Online' : lastSeenLabel(device)}</Text>
+            <Text style={styles.statusText}>
+              {isOnline ? t.common.online : lastSeenLabel(device, t.devices)}
+            </Text>
           </View>
         </View>
         {onPress && <Feather name="chevron-right" size={20} color={Colors.textMuted} />}
@@ -64,18 +69,18 @@ export default function DeviceRow({
       <View style={styles.options}>
         <View style={styles.option}>
           <Feather name="smartphone" size={16} color={Colors.teal} />
-          <Text style={styles.optionLabel}>Vibration</Text>
+          <Text style={styles.optionLabel}>{t.devices.vibration}</Text>
           <Toggle
-            label={`Vibration of ${device.name}`}
+            label={t.devices.vibrationOf(device.name)}
             value={device.settings.vibration_enabled}
             onChange={(value) => onChangeSettings(device.id, { vibration_enabled: value })}
           />
         </View>
         <View style={styles.option}>
           <Feather name="sun" size={16} color={Colors.teal} />
-          <Text style={styles.optionLabel}>Light</Text>
+          <Text style={styles.optionLabel}>{t.devices.light}</Text>
           <Toggle
-            label={`Light of ${device.name}`}
+            label={t.devices.lightOf(device.name)}
             value={device.settings.led_enabled}
             onChange={(value) => onChangeSettings(device.id, { led_enabled: value })}
           />

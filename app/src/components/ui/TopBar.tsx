@@ -4,6 +4,7 @@ import { router } from 'expo-router';
 import Feather from '@expo/vector-icons/Feather';
 import { Colors } from '@/constants/Colors';
 import { Fonts } from '@/constants/Fonts';
+import { useLanguage } from '@/hooks/useLanguage';
 
 type TopBarProps = {
   title: string;
@@ -13,12 +14,13 @@ type TopBarProps = {
 
 /** Header of a screen opened on top of the tabs: a back button and a title. */
 export default function TopBar({ title, right }: TopBarProps) {
+  const { t } = useLanguage();
   return (
     <View style={styles.row}>
       <Pressable
         onPress={() => (router.canGoBack() ? router.back() : router.replace('/'))}
         accessibilityRole="button"
-        accessibilityLabel="Back"
+        accessibilityLabel={t.common.back}
         hitSlop={8}
         style={({ pressed }) => [styles.back, pressed && styles.backPressed]}>
         <Feather name="arrow-left" size={20} color={Colors.ink} />

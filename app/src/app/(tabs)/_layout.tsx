@@ -4,9 +4,11 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import TabBarIcon from '@/components/TabBarIcon';
 import { Colors } from '@/constants/Colors';
 import { Fonts } from '@/constants/Fonts';
+import { useLanguage } from '@/hooks/useLanguage';
 
 export default function TabsLayout() {
   const insets = useSafeAreaInsets();
+  const { t } = useLanguage();
 
   return (
     <Tabs
@@ -16,6 +18,9 @@ export default function TabsLayout() {
         tabBarInactiveTintColor: Colors.textMuted,
         tabBarLabelStyle: styles.label,
         tabBarItemStyle: styles.item,
+        // The icon box must be as big as the yellow pill of TabBarIcon,
+        // otherwise the pill spills over the label.
+        tabBarIconStyle: styles.icon,
         // Floating bar: lifted above the home indicator, the screens scroll under it.
         tabBarStyle: [styles.bar, { bottom: Math.max(insets.bottom, 10) }],
         sceneStyle: { backgroundColor: Colors.bg },
@@ -23,28 +28,28 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: 'Today',
+          title: t.tabs.today,
           tabBarIcon: ({ focused }) => <TabBarIcon name="home" focused={focused} />,
         }}
       />
       <Tabs.Screen
         name="reminders"
         options={{
-          title: 'Reminders',
+          title: t.tabs.reminders,
           tabBarIcon: ({ focused }) => <TabBarIcon name="check-square" focused={focused} />,
         }}
       />
       <Tabs.Screen
         name="calendar"
         options={{
-          title: 'Calendar',
+          title: t.tabs.calendar,
           tabBarIcon: ({ focused }) => <TabBarIcon name="calendar" focused={focused} />,
         }}
       />
       <Tabs.Screen
         name="settings"
         options={{
-          title: 'Settings',
+          title: t.tabs.settings,
           tabBarIcon: ({ focused }) => <TabBarIcon name="settings" focused={focused} />,
         }}
       />
@@ -56,7 +61,7 @@ const styles = StyleSheet.create({
   bar: {
     position: 'absolute',
     marginHorizontal: 12,
-    height: 72,
+    height: 80,
     paddingTop: 8,
     paddingBottom: 8,
     borderRadius: 22,
@@ -70,7 +75,12 @@ const styles = StyleSheet.create({
   item: {
     gap: 2,
   },
+  icon: {
+    width: 48,
+    height: 34,
+  },
   label: {
+    marginTop: 4,
     fontFamily: Fonts.bodyBold,
     fontSize: 11,
   },

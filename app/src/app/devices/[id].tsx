@@ -15,33 +15,35 @@ import { Colors } from '@/constants/Colors';
 import { Fonts } from '@/constants/Fonts';
 import { useActionError } from '@/hooks/useActionError';
 import { useDevices } from '@/hooks/useDevices';
+import { useLanguage } from '@/hooks/useLanguage';
 import { isDeviceOnline } from '@/services/devices';
 import type { Device, DeviceSettings } from '@/types/models';
 
 /** Colors the LED can take, from the app palette. */
 const LED_COLORS = [
-  { value: Colors.yellow, label: 'Yellow' },
-  { value: Colors.coral, label: 'Coral' },
-  { value: Colors.green, label: 'Green' },
-  { value: Colors.aqua, label: 'Aqua' },
-  { value: Colors.teal, label: 'Teal' },
-  { value: Colors.white, label: 'White' },
-];
+  { value: Colors.yellow, key: 'yellow' },
+  { value: Colors.coral, key: 'coral' },
+  { value: Colors.green, key: 'green' },
+  { value: Colors.aqua, key: 'aqua' },
+  { value: Colors.teal, key: 'teal' },
+  { value: Colors.white, key: 'white' },
+] as const;
 
 export default function DeviceScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
+  const { t } = useLanguage();
   const { devices, isLoading } = useDevices();
   const device = devices.find((item) => item.id === id);
 
   if (!device) {
     return (
       <Screen tabBar={false}>
-        <TopBar title="Device" />
+        <TopBar title={t.devices.device} />
         {isLoading ? (
           <ActivityIndicator color={Colors.teal} style={styles.loader} />
         ) : (
           <Card>
-            <Text style={styles.emptyTitle}>This device isn’t paired anymore.</Text>
+            <Text style={styles.emptyTitle}>{t.devices.notPaired}</Text>
           </Card>
         )}
       </Screen>
@@ -54,6 +56,7 @@ export default function DeviceScreen() {
 
 /** The editable part, split out so its draft state starts from a loaded device. */
 function DeviceForm({ device }: { device: Device }) {
+  const { t } = useLanguage();
   const { update, remove } = useDevices();
   const { actionError, run } = useActionError();
   const [name, setName] = useState(device.name);
@@ -61,7 +64,7 @@ function DeviceForm({ device }: { device: Device }) {
   const [isSaving, setIsSaving] = useState(false);
 
   const isOnline = isDeviceOnline(device);
-  const nameError = name.trim() === '' ? 'Give your device a name.' : null;
+  const nameError = name.trim() === '' ? t.devices.nameRequired : null;
 
   const change = (changes: Partial<DeviceSettings>) =>
     setSettings((current) => ({ ...current, ...changes }));
@@ -71,36 +74,35 @@ function DeviceForm({ device }: { device: Device }) {
     setIsSaving(true);
     const isSaved = await run(
       () => update(device.id, { name: name.trim(), settings }),
-      'Could not save the settings. Check your connection and try again.',
+      t.devices.saveError,
     );
     setIsSaving(false);
     if (isSaved) router.back();
   };
 
   const confirmDelete = () => {
-    Alert.alert(
-      `Remove “${device.name}”?`,
-      'The device will stop alerting. Your reminders are kept. To use it again, pair it with a new code.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Remove',
-          style: 'destructive',
-          onPress: async () => {
-            const isDeleted = await run(() => remove(device.id), 'Could not remove the device.');
-            if (isDeleted) router.back();
-          },
+    Alert.alert(t.devices.removeConfirm(device.name), t.devices.removeConfirmText, [
+      { text: t.common.cancel, style: 'cancel' },
+      {
+        text: t.devices.remove,
+        style: 'destructive',
+        onPress: async () => {
+          const isDeleted = await run(() => remove(device.id), t.devices.removeError);
+          if (isDeleted) router.back();
         },
-      ],
-    );
+      },
+    ]);
   };
 
   return (
     <Screen tabBar={false}>
       <TopBar
-        title="Device"
+        title={t.devices.device}
         right={
-          <Badge tone={isOnline ? 'success' : 'muted'} label={isOnline ? 'Online' : 'Offline'} />
+          <Badge
+            tone={isOnline ? 'success' : 'muted'}
+            label={isOnline ? t.common.online : t.common.offline}
+          />
         }
       />
 
@@ -109,29 +111,29 @@ function DeviceForm({ device }: { device: Device }) {
       {/* ----- Name ----- */}
       <Card>
         <TextField
-          label="Name"
+          label={t.common.name}
           value={name}
           onChangeText={setName}
-          placeholder="Desk companion"
+          placeholder={t.devices.namePlaceholder}
           maxLength={40}
           error={nameError}
         />
-        <Text style={styles.serial}>Serial number: {device.serial_number}</Text>
+        <Text style={styles.serial}>{t.devices.serial(device.serial_number)}</Text>
       </Card>
 
       {/* ----- Vibration ----- */}
       <Card style={styles.section}>
         <View style={styles.sectionHeading}>
           <Feather name="smartphone" size={18} color={Colors.teal} />
-          <Text style={styles.sectionTitle}>Vibration</Text>
+          <Text style={styles.sectionTitle}>{t.devices.vibration}</Text>
           <Toggle
-            label="Vibration"
+            label={t.devices.vibration}
             value={settings.vibration_enabled}
             onChange={(value) => change({ vibration_enabled: value })}
           />
         </View>
         <Stepper
-          label="Intensity"
+          label={t.devices.intensity}
           value={settings.vibration_intensity}
           onChange={(value) => change({ vibration_intensity: value })}
           min={10}
@@ -141,7 +143,7 @@ function DeviceForm({ device }: { device: Device }) {
           disabled={!settings.vibration_enabled}
         />
         <Stepper
-          label="Duration"
+          label={t.devices.duration}
           value={settings.vibration_duration}
           onChange={(value) => change({ vibration_duration: value })}
           min={1}
@@ -156,15 +158,15 @@ function DeviceForm({ device }: { device: Device }) {
       <Card style={styles.section}>
         <View style={styles.sectionHeading}>
           <Feather name="sun" size={18} color={Colors.teal} />
-          <Text style={styles.sectionTitle}>Light</Text>
+          <Text style={styles.sectionTitle}>{t.devices.light}</Text>
           <Toggle
-            label="Light"
+            label={t.devices.light}
             value={settings.led_enabled}
             onChange={(value) => change({ led_enabled: value })}
           />
         </View>
         <Stepper
-          label="Brightness"
+          label={t.devices.brightness}
           value={settings.led_brightness}
           onChange={(value) => change({ led_brightness: value })}
           min={10}
@@ -182,7 +184,7 @@ function DeviceForm({ device }: { device: Device }) {
                 onPress={() => change({ led_color: color.value })}
                 disabled={!settings.led_enabled}
                 accessibilityRole="radio"
-                accessibilityLabel={color.label}
+                accessibilityLabel={t.devices.colors[color.key]}
                 accessibilityState={{ checked: isSelected }}
                 style={[
                   styles.swatch,
@@ -197,14 +199,14 @@ function DeviceForm({ device }: { device: Device }) {
       </Card>
 
       <Button
-        label="Save"
+        label={t.common.save}
         icon="check"
         onPress={handleSave}
         loading={isSaving}
         disabled={!!nameError}
       />
       <Button
-        label="Remove this device"
+        label={t.devices.removeDevice}
         icon="trash-2"
         variant="secondary"
         onPress={confirmDelete}

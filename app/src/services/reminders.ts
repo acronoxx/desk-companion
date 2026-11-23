@@ -155,6 +155,8 @@ export async function getReminderDeviceIds(reminderId: string): Promise<string[]
  * Marks a reminder as done, through the complete_reminder SQL function:
  * - one-off reminder: completed_at = now, it disappears from the devices;
  * - recurring reminder: due_at and remind_at move to the next occurrence, completed_at stays null.
+ * The phone's time zone is sent so the next occurrence is computed in local time
+ * ("every Sunday at 9:00" stays on Sunday at 9:00).
  * RLS applies inside the function, so only the user's own reminders can be completed.
  *
  * @param reminderId - The reminder's id.
@@ -162,7 +164,11 @@ export async function getReminderDeviceIds(reminderId: string): Promise<string[]
  * @throws If the reminder does not exist or the network fails.
  */
 export async function completeReminder(reminderId: string): Promise<Reminder> {
-  const { data, error } = await supabase.rpc('complete_reminder', { reminder_id: reminderId });
+  const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone ?? 'UTC';
+  const { data, error } = await supabase.rpc('complete_reminder', {
+    reminder_id: reminderId,
+    time_zone: timeZone,
+  });
 
   if (error) {
     throw new Error(error.message);

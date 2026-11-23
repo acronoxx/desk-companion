@@ -21,7 +21,7 @@ erDiagram
 
     PROFILES {
         uuid id PK, FK
-        text display_name "default: email before the @"
+        text display_name "first name from the signup"
         timestamptz created_at
     }
 
@@ -44,6 +44,7 @@ erDiagram
         timestamptz due_at "deadline"
         timestamptz remind_at "alert time, before or at the deadline"
         recurrence recurrence "null = one-off, else daily / weekly / monthly / yearly"
+        smallint[] recurrence_days "weekly only: ISO days, 1 = Mon ... 7 = Sun"
         timestamptz completed_at "null = not done yet"
         timestamptz created_at
         timestamptz updated_at
@@ -78,7 +79,7 @@ A profile is created by the `on_auth_user_created` trigger (function `handle_new
 
 | Column | Purpose |
 |---|---|
-| `display_name` | Name shown in the app, never `null` or empty (spaces only counts as empty). Defaults to the part of the email before the `@` (`alice.martin@school.fr` → `alice.martin`). The user can change it in the Settings tab. |
+| `display_name` | Name shown in the app, never `null` or empty (spaces only counts as empty). The first name typed at signup: the app sends it in the user metadata (`display_name`) and the trigger copies it. Without one (account created from the dashboard), the part of the email before the `@` (`alice.martin@school.fr` → `alice.martin`). |
 
 To change the default, edit `handle_new_user` in `schema.sql`, then run that block again in the SQL Editor (`create or replace function`). Existing profiles are not updated.
 
@@ -95,12 +96,15 @@ A reminder is marked as done in the app (devices have no button); it then stops 
 | `due_at` | The deadline (e.g. assignment due Monday 11:59 pm). |
 | `remind_at` | When the device alerts (e.g. Sunday 6 pm). Always before or equal to `due_at`. |
 | `recurrence` | `null` for a one-off reminder, otherwise `daily` / `weekly` / `monthly` / `yearly`. |
+| `recurrence_days` | Only with `weekly`: the days of the week it repeats on, ISO numbers in the user's local time (`{7}` = every Sunday, `{4,5}` = every Thursday and Friday). `null` = same day as `due_at`. The app always saves `due_at` on one of these days. |
 | `completed_at` | `null` until it is done. |
 
-Marking as done (`complete_reminder` function, called by the app):
+Marking as done (`complete_reminder(reminder_id, time_zone)` SQL function, called by the app with `supabase.rpc`; `time_zone` is the phone's IANA zone, e.g. `Europe/Paris`):
 
 - **one-off reminder**: `completed_at = now()`, it disappears from the device;
-- **recurring reminder**: `due_at` and `remind_at` move forward together by one period until they are in the future. `completed_at` stays `null`.
+- **recurring reminder**: `due_at` and `remind_at` move forward together, at least once and until the deadline is in the future: by one period, or for a weekly reminder with `recurrence_days`, to the next chosen day. Dates move in local time, so "every Sunday at 9:00" stays at 9:00 across a daylight saving change. `completed_at` stays `null`.
+
+The function runs with the caller's rights, so RLS applies: a user can only complete their own reminders.
 
 The title is 1 to 50 characters long.
 
@@ -110,9 +114,14 @@ A device's settings are stored in `devices.settings`, a JSON object. Current set
 
 | Key | Type | Default | Purpose |
 |---|---|---|---|
-| `vibration_intensity` | number 0–100 | 50 | Vibration strength |
+| `vibration_enabled` | boolean | `true` | The device vibrates when a reminder alerts |
+| `vibration_intensity` | number 0–100 | `50` | Vibration strength, in % (checked by the database) |
+| `vibration_duration` | number | `2` | How long the vibration lasts, in seconds (1 to 10 in the app) |
+| `led_enabled` | boolean | `true` | The LED lights up when a reminder alerts |
+| `led_color` | text | `"#ffd83d"` | LED color, hex `#rrggbb` |
+| `led_brightness` | number | `70` | LED brightness, in % (10 to 100 in the app) |
 
-To add a setting, handle it in the app and in the ESP32 code (with a default value if the key is missing), then add it to this table.
+The default of the column contains every key: the app (`DeviceSettings` in `app/src/types/models.ts`) expects all of them. To add a setting, add it to the default in `schema.sql` **and** in a migration that also fills the existing rows (see `database/migrations/001_…sql`), to `DeviceSettings`, to the ESP32 code, then to this table.
 
 ## Dates
 

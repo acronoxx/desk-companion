@@ -10,18 +10,21 @@ import TextLink from '@/components/ui/TextLink';
 import { Colors } from '@/constants/Colors';
 import { Fonts } from '@/constants/Fonts';
 import { signInWithEmail } from '@/services/auth';
+import { useLanguage } from '@/hooks/useLanguage';
+import type { Strings } from '@/i18n/en';
 
 /** Turns a Supabase error into a sentence the user can act on. */
-function errorMessage(error: unknown): string {
+function errorMessage(error: unknown, t: Strings['auth']): string {
   if (isAuthError(error)) {
-    if (error.code === 'invalid_credentials') return 'Wrong email or password.';
-    if (error.code === 'email_not_confirmed') return 'Confirm your email first: check your inbox.';
-    if (error.status === 0) return 'No connection. Check your network and try again.';
+    if (error.code === 'invalid_credentials') return t.wrongCredentials;
+    if (error.code === 'email_not_confirmed') return t.emailNotConfirmed;
+    if (error.status === 0) return t.noConnection;
   }
-  return 'Something went wrong. Please try again.';
+  return t.genericError;
 }
 
 export default function LoginScreen() {
+  const { t } = useLanguage();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -36,27 +39,27 @@ export default function LoginScreen() {
       // On success, AuthProvider receives the session and the root layout opens the tabs.
       await signInWithEmail(email.trim(), password);
     } catch (caught) {
-      setError(errorMessage(caught));
+      setError(errorMessage(caught, t.auth));
       setIsSubmitting(false);
     }
   };
 
   return (
     <AuthLayout
-      title="Log in"
+      title={t.auth.loginTitle}
       footer={
         <View style={styles.switchRow}>
-          <Text style={styles.switchText}>New here?</Text>
-          <TextLink label="Create an account" onPress={() => router.replace('/signup')} />
+          <Text style={styles.switchText}>{t.auth.newHere}</Text>
+          <TextLink label={t.auth.createAccountLink} onPress={() => router.replace('/signup')} />
         </View>
       }>
       {error && <Notice tone="error" message={error} />}
 
       <TextField
-        label="Email"
+        label={t.auth.email}
         value={email}
         onChangeText={setEmail}
-        placeholder="you@example.com"
+        placeholder={t.auth.emailPlaceholder}
         keyboardType="email-address"
         autoCapitalize="none"
         autoComplete="email"
@@ -64,11 +67,11 @@ export default function LoginScreen() {
         returnKeyType="next"
       />
       <TextField
-        label="Password"
+        label={t.auth.password}
         password
         value={password}
         onChangeText={setPassword}
-        placeholder="Your password"
+        placeholder={t.auth.passwordPlaceholder}
         autoComplete="current-password"
         textContentType="password"
         returnKeyType="go"
@@ -76,7 +79,7 @@ export default function LoginScreen() {
       />
 
       <Button
-        label="Log in"
+        label={t.auth.loginTitle}
         icon="arrow-right"
         onPress={handleSubmit}
         loading={isSubmitting}

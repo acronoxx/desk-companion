@@ -136,6 +136,7 @@ export type Database = {
           due_at: string
           id: string
           recurrence: Database["public"]["Enums"]["recurrence"] | null
+          recurrence_days: number[] | null
           remind_at: string
           title: string
           updated_at: string
@@ -148,6 +149,7 @@ export type Database = {
           due_at: string
           id?: string
           recurrence?: Database["public"]["Enums"]["recurrence"] | null
+          recurrence_days?: number[] | null
           remind_at: string
           title: string
           updated_at?: string
@@ -160,6 +162,7 @@ export type Database = {
           due_at?: string
           id?: string
           recurrence?: Database["public"]["Enums"]["recurrence"] | null
+          recurrence_days?: number[] | null
           remind_at?: string
           title?: string
           updated_at?: string
@@ -181,7 +184,7 @@ export type Database = {
     }
     Functions: {
       complete_reminder: {
-        Args: { reminder_id: string }
+        Args: { reminder_id: string; time_zone?: string }
         Returns: {
           completed_at: string | null
           created_at: string
@@ -189,6 +192,7 @@ export type Database = {
           due_at: string
           id: string
           recurrence: Database["public"]["Enums"]["recurrence"] | null
+          recurrence_days: number[] | null
           remind_at: string
           title: string
           updated_at: string

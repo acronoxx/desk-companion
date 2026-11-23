@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useState, type ReactNode } from '
 import { AppState } from 'react-native';
 import type { Device, DeviceSettings } from '@/types/models';
 import { useAuth } from './useAuth';
+import { useLanguage } from './useLanguage';
 import { claimDevice, deleteDevice, getDevices, updateDevice } from '@/services/devices';
 
 export type UseDevicesResult = {
@@ -34,7 +35,10 @@ export function DevicesProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   const [devices, setDevices] = useState<Device[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const { t } = useLanguage();
+  /** The message is picked at render time, so it follows the language. */
+  const [hasError, setHasError] = useState(false);
+  const error = hasError ? t.devices.loadError : null;
   /** Changing this number runs the loading effect again. */
   const [reloadCount, setReloadCount] = useState(0);
   const userId = user?.id;
@@ -47,7 +51,7 @@ export function DevicesProvider({ children }: { children: ReactNode }) {
     let isCancelled = false;
 
     const load = async () => {
-      setError(null);
+      setHasError(false);
 
       try {
         const data = await getDevices(userId);
@@ -56,7 +60,7 @@ export function DevicesProvider({ children }: { children: ReactNode }) {
         }
       } catch {
         if (!isCancelled) {
-          setError('Could not load your devices.');
+          setHasError(true);
         }
       } finally {
         if (!isCancelled) {

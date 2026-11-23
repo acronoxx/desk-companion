@@ -13,16 +13,19 @@ import { Fonts } from '@/constants/Fonts';
 import { useActionError } from '@/hooks/useActionError';
 import { useDevices } from '@/hooks/useDevices';
 import { useReminders } from '@/hooks/useReminders';
+import { useLanguage } from '@/hooks/useLanguage';
 import { getReminderDeviceIds } from '@/services/reminders';
 
 export default function EditReminderScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
+  const { t } = useLanguage();
   const { reminders, isLoading, update, complete, remove } = useReminders();
   const { devices } = useDevices();
   const { actionError, run } = useActionError();
   /** The devices the reminder is shown on now. null while loading. */
   const [deviceIds, setDeviceIds] = useState<string[] | null>(null);
-  const [linksError, setLinksError] = useState<string | null>(null);
+  const [hasLinksError, setHasLinksError] = useState(false);
+  const linksError = hasLinksError ? t.reminders.linksError : null;
 
   const reminder = reminders.find((item) => item.id === id);
   const isDone = reminder?.completed_at != null;
@@ -35,7 +38,7 @@ export default function EditReminderScreen() {
         if (!isCancelled) setDeviceIds(ids);
       })
       .catch(() => {
-        if (!isCancelled) setLinksError('Could not load the devices of this reminder.');
+        if (!isCancelled) setHasLinksError(true);
       });
     return () => {
       isCancelled = true;
@@ -43,27 +46,24 @@ export default function EditReminderScreen() {
   }, [id]);
 
   const handleSubmit = async ({ input, deviceIds: newDeviceIds }: ReminderFormValues) => {
-    const isSaved = await run(
-      () => update(id, input, newDeviceIds),
-      'Could not save the changes. Check your connection and try again.',
-    );
+    const isSaved = await run(() => update(id, input, newDeviceIds), t.reminders.saveError);
     if (isSaved) router.back();
     return isSaved;
   };
 
   const handleComplete = async () => {
-    const isDoneNow = await run(() => complete(id), 'Could not mark the reminder as done.');
+    const isDoneNow = await run(() => complete(id), t.reminders.completeError);
     if (isDoneNow) router.back();
   };
 
   const confirmDelete = () => {
-    Alert.alert('Delete this reminder?', 'It will also disappear from your devices.', [
-      { text: 'Cancel', style: 'cancel' },
+    Alert.alert(t.reminders.deleteConfirm, t.reminders.deleteConfirmText, [
+      { text: t.common.cancel, style: 'cancel' },
       {
-        text: 'Delete',
+        text: t.common.delete,
         style: 'destructive',
         onPress: async () => {
-          const isDeleted = await run(() => remove(id), 'Could not delete the reminder.');
+          const isDeleted = await run(() => remove(id), t.reminders.deleteError);
           if (isDeleted) router.back();
         },
       },
@@ -74,13 +74,13 @@ export default function EditReminderScreen() {
   if (!reminder) {
     return (
       <Screen tabBar={false}>
-        <TopBar title="Reminder" />
+        <TopBar title={t.reminders.reminderTitle} />
         {isLoading ? (
           <ActivityIndicator color={Colors.teal} style={styles.loader} />
         ) : (
           <Card>
-            <Text style={styles.emptyTitle}>This reminder doesn’t exist anymore.</Text>
-            <Text style={styles.emptyText}>It may have been deleted on another phone.</Text>
+            <Text style={styles.emptyTitle}>{t.reminders.notFound}</Text>
+            <Text style={styles.emptyText}>{t.reminders.notFoundText}</Text>
           </Card>
         )}
       </Screen>
@@ -90,12 +90,12 @@ export default function EditReminderScreen() {
   return (
     <Screen tabBar={false}>
       <TopBar
-        title="Edit reminder"
+        title={t.reminders.editTitle}
         right={
           <Pressable
             onPress={confirmDelete}
             accessibilityRole="button"
-            accessibilityLabel="Delete the reminder"
+            accessibilityLabel={t.reminders.deleteLabel}
             hitSlop={8}
             style={({ pressed }) => [styles.delete, pressed && styles.deletePressed]}>
             <Feather name="trash-2" size={18} color={Colors.coral} />
@@ -108,7 +108,7 @@ export default function EditReminderScreen() {
 
       {!isDone && (
         <Button
-          label={reminder.recurrence ? 'Done, move to the next one' : 'Mark as done'}
+          label={reminder.recurrence ? t.reminders.doneNext : t.reminders.markAsDone}
           icon="check-circle"
           variant="secondary"
           onPress={handleComplete}
@@ -122,7 +122,7 @@ export default function EditReminderScreen() {
           initial={reminder}
           initialDeviceIds={deviceIds}
           devices={devices}
-          submitLabel="Save the changes"
+          submitLabel={t.reminders.saveButton}
           onSubmit={handleSubmit}
         />
       )}

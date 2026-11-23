@@ -15,8 +15,9 @@ create table public.profiles (
 );
 
 -- Automatically creates the profile when someone signs up.
--- display_name defaults to the part of the email before the @
--- (alice.martin@school.fr → alice.martin). The user can change it later in the app.
+-- display_name is the first name typed at signup (sent in the user metadata by the app).
+-- Without one (account created from the dashboard), it falls back to the part of the email
+-- before the @ (alice.martin@school.fr → alice.martin). The user can change it later in the app.
 create or replace function public.handle_new_user()
 returns trigger
 language plpgsql
@@ -24,7 +25,13 @@ security definer set search_path = ''
 as $$
 begin
   insert into public.profiles (id, display_name)
-  values (new.id, split_part(new.email, '@', 1));
+  values (
+    new.id,
+    coalesce(
+      nullif(btrim(new.raw_user_meta_data ->> 'display_name'), ''),
+      split_part(new.email, '@', 1)
+    )
+  );
   return new;
 end;
 $$;
@@ -46,9 +53,17 @@ create table public.devices (
   serial_number text not null unique,   -- e.g. the ESP32 MAC address
   secret_hash   text not null,          -- sha256 (hex) of the secret the ESP32 generated itself
   last_seen_at  timestamptz,            -- updated every time the ESP32 connects
-  -- Settings edited in the app, read by the ESP32 (e.g. {"vibration_intensity": 50}).
+  -- Settings edited in the app, read by the ESP32. Same keys as DeviceSettings in
+  -- app/src/types/models.ts: every key must be in the default, the app expects all of them.
   -- Stored as JSON so a setting can be added without changing the table.
-  settings      jsonb not null default '{"vibration_intensity": 50}'::jsonb
+  settings      jsonb not null default '{
+                  "vibration_enabled": true,
+                  "vibration_intensity": 50,
+                  "vibration_duration": 2,
+                  "led_enabled": true,
+                  "led_color": "#ffd83d",
+                  "led_brightness": 70
+                }'::jsonb
                 check (jsonb_typeof(settings) = 'object')
                 check ((settings ->> 'vibration_intensity')::int between 0 and 100),
   created_at    timestamptz not null default now()
@@ -73,6 +88,15 @@ create table public.reminders (
   due_at       timestamptz not null,    -- deadline / next occurrence
   remind_at    timestamptz not null,    -- when the device alerts (before or at the deadline)
   recurrence   public.recurrence,       -- null = one-off reminder
+  -- Only with 'weekly': the days it repeats on, ISO numbers (1 = Monday ... 7 = Sunday),
+  -- in the user's local time. null = same day of the week as due_at.
+  -- e.g. {7} = every Sunday, {4,5} = every Thursday and Friday.
+  recurrence_days smallint[]
+               check (recurrence_days is null or (
+                 recurrence = 'weekly'
+                 and cardinality(recurrence_days) between 1 and 7
+                 and recurrence_days <@ array[1, 2, 3, 4, 5, 6, 7]::smallint[]
+               )),
   completed_at timestamptz,             -- null = not done yet (always null for a recurring reminder)
   created_at   timestamptz not null default now(),
   updated_at   timestamptz not null default now(),
@@ -156,10 +180,71 @@ create policy "Delete own reminder links" on public.reminder_devices
   ));
 
 -- ---------------------------------------------------------------------------
--- To write: mark a reminder as done (called by the app)
--- ---------------------------------------------------------------------------
--- complete_reminder(reminder_id uuid) returns public.reminders
+-- Mark a reminder as done (called by the app: supabase.rpc('complete_reminder'))
 --   - one-off reminder   : completed_at = now()
---   - recurring reminder : due_at and remind_at move forward together by one period
---                          (day / week / month / year) until they are in the future,
---                          completed_at stays null
+--   - recurring reminder : due_at and remind_at move forward together, at least once and
+--                          until the deadline is in the future. completed_at stays null.
+--       daily / weekly / monthly / yearly : by one period at a time;
+--       weekly with recurrence_days       : to the next of the chosen days of the week.
+-- time_zone: the phone's IANA zone (e.g. 'Europe/Paris'). The dates are moved in local time,
+-- so "every Sunday at 9:00" stays on Sunday at 9:00, even across a daylight saving change.
+-- Security invoker (the default): RLS applies, so a user can only complete their own reminders.
+-- ---------------------------------------------------------------------------
+create or replace function public.complete_reminder(reminder_id uuid, time_zone text default 'UTC')
+returns public.reminders
+language plpgsql
+set search_path = ''
+as $$
+declare
+  reminder     public.reminders;
+  local_due    timestamp;   -- due_at as read on the phone's clock
+  local_remind timestamp;
+  step         interval;
+  periods      int := 0;
+begin
+  select * into reminder from public.reminders where id = complete_reminder.reminder_id;
+  if not found then
+    raise exception 'Reminder % not found', complete_reminder.reminder_id using errcode = 'P0002';
+  end if;
+
+  if reminder.recurrence is null then
+    update public.reminders set completed_at = now()
+    where id = reminder.id
+    returning * into reminder;
+    return reminder;
+  end if;
+
+  local_due    := reminder.due_at    at time zone complete_reminder.time_zone;
+  local_remind := reminder.remind_at at time zone complete_reminder.time_zone;
+
+  if reminder.recurrence_days is not null then
+    -- Day by day until a chosen day of the week (isodow: 1 = Monday ... 7 = Sunday).
+    step := interval '1 day';
+    loop
+      periods := periods + 1;
+      exit when extract(isodow from local_due + step * periods)::smallint = any (reminder.recurrence_days)
+        and (local_due + step * periods) at time zone complete_reminder.time_zone > now();
+    end loop;
+  else
+    step := case reminder.recurrence
+      when 'daily'   then interval '1 day'
+      when 'weekly'  then interval '1 week'
+      when 'monthly' then interval '1 month'
+      when 'yearly'  then interval '1 year'
+    end;
+
+    -- Counted from the current date (not added one by one), so Jan 31 + 2 months = Mar 31.
+    loop
+      periods := periods + 1;
+      exit when (local_due + step * periods) at time zone complete_reminder.time_zone > now();
+    end loop;
+  end if;
+
+  update public.reminders
+  set due_at    = (local_due    + step * periods) at time zone complete_reminder.time_zone,
+      remind_at = (local_remind + step * periods) at time zone complete_reminder.time_zone
+  where id = reminder.id
+  returning * into reminder;
+  return reminder;
+end;
+$$;

@@ -2,7 +2,7 @@ import { Stack } from 'expo-router';
 
 // Without an index screen in this group, tell the router which screen opens first.
 export const unstable_settings = {
-  initialRouteName: 'login',
+  anchor: 'login', // SDK 58 name of initialRouteName
 };
 
 export default function AuthLayout() {

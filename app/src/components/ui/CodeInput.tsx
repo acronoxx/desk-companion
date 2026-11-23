@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Pressable, StyleSheet, Text, TextInput, View, type TextInputInstance } from 'react-native';
 import { Colors } from '@/constants/Colors';
 import { Fonts } from '@/constants/Fonts';
 
@@ -17,7 +17,8 @@ type CodeInputProps = {
  * so pasting and deleting work like in a normal field.
  */
 export default function CodeInput({ value, onChange, length = 6, label }: CodeInputProps) {
-  const inputRef = useRef<TextInput>(null);
+  // RN 0.88: TextInput is a component type, its ref holds a TextInputInstance.
+  const inputRef = useRef<TextInputInstance>(null);
   const [isFocused, setIsFocused] = useState(false);
 
   return (

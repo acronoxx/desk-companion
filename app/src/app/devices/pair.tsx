@@ -12,43 +12,35 @@ import { Colors } from '@/constants/Colors';
 import { Fonts } from '@/constants/Fonts';
 import { useActionError } from '@/hooks/useActionError';
 import { useDevices } from '@/hooks/useDevices';
+import { useLanguage } from '@/hooks/useLanguage';
 
 const CODE_LENGTH = 6;
 
-/** What the user does on the device before typing the code (flow 1 of docs/architecture.md). */
-const STEPS = [
-  'Plug in your desk companion.',
-  'On your phone, join the Wi-Fi “DeskCompanion-XXXX”.',
-  'On the page that opens, pick your Wi-Fi and note the 6-digit code.',
-  'Come back here and type that code.',
-];
-
 export default function PairDeviceScreen() {
+  const { t } = useLanguage();
   const { claim } = useDevices();
   const { actionError, run } = useActionError();
   const [code, setCode] = useState('');
-  const [name, setName] = useState('My desk companion');
+  const [name, setName] = useState(t.devices.defaultName);
   const [isPairing, setIsPairing] = useState(false);
 
   const canPair = code.length === CODE_LENGTH && name.trim() !== '';
 
   const handlePair = async () => {
     setIsPairing(true);
-    const isPaired = await run(
-      () => claim(code, name.trim()),
-      'Could not pair the device. Check the code shown on its setup page and try again.',
-    );
+    const isPaired = await run(() => claim(code, name.trim()), t.devices.pairError);
     setIsPairing(false);
     if (isPaired) router.back();
   };
 
   return (
     <Screen tabBar={false}>
-      <TopBar title="Add a device" />
+      <TopBar title={t.devices.pairTitle} />
 
       {/* ----- How to get the code ----- */}
       <Card style={styles.steps}>
-        {STEPS.map((step, index) => (
+        {/* What the user does on the device first (flow 1 of docs/architecture.md). */}
+        {t.devices.pairSteps.map((step, index) => (
           <View key={step} style={styles.step}>
             <View style={styles.stepNumber}>
               <Text style={styles.stepNumberText}>{index + 1}</Text>
@@ -62,19 +54,24 @@ export default function PairDeviceScreen() {
 
       {/* ----- Code and name ----- */}
       <Card style={styles.form}>
-        <CodeInput label="Pairing code" value={code} onChange={setCode} length={CODE_LENGTH} />
+        <CodeInput
+          label={t.devices.pairingCode}
+          value={code}
+          onChange={setCode}
+          length={CODE_LENGTH}
+        />
         <TextField
-          label="Name"
+          label={t.common.name}
           value={name}
           onChangeText={setName}
-          placeholder="My desk companion"
+          placeholder={t.devices.defaultName}
           maxLength={40}
           returnKeyType="done"
         />
       </Card>
 
       <Button
-        label="Pair the device"
+        label={t.devices.pairButton}
         icon="link"
         onPress={handlePair}
         loading={isPairing}

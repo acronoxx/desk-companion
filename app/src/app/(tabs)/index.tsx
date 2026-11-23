@@ -11,21 +11,23 @@ import { Colors } from '@/constants/Colors';
 import { Fonts } from '@/constants/Fonts';
 import { useActionError } from '@/hooks/useActionError';
 import { useDevices } from '@/hooks/useDevices';
+import { useLanguage } from '@/hooks/useLanguage';
 import { useProfile } from '@/hooks/useProfile';
 import { useReminders } from '@/hooks/useReminders';
 import { isDeviceOnline } from '@/services/devices';
+import type { Strings } from '@/i18n/en';
 
 const PREVIEW_COUNT = 3;
 
-function greeting(): string {
+function greeting(t: Strings['today']): string {
   const hour = new Date().getHours();
-  if (hour < 12) return 'Good morning';
-  if (hour < 18) return 'Hello';
-  return 'Good evening';
+  if (hour < 12) return t.goodMorning;
+  if (hour < 18) return t.hello;
+  return t.goodEvening;
 }
 
-function formatTime(iso: string): string {
-  return new Date(iso).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+function formatTime(iso: string, locale: string): string {
+  return new Date(iso).toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
 }
 
 function isToday(iso: string): boolean {
@@ -33,13 +35,14 @@ function isToday(iso: string): boolean {
 }
 
 export default function HomeScreen() {
+  const { t, locale } = useLanguage();
   const { profile } = useProfile();
   const { reminders, error, complete } = useReminders();
   const { devices } = useDevices();
   const { actionError, run } = useActionError();
 
   const handleComplete = (reminderId: string) =>
-    run(() => complete(reminderId), 'Could not mark the reminder as done.');
+    run(() => complete(reminderId), t.reminders.completeError);
   const openReminder = (reminderId: string) =>
     router.push({ pathname: '/reminders/[id]', params: { id: reminderId } });
 
@@ -48,7 +51,7 @@ export default function HomeScreen() {
   const leftToday = open.filter((reminder) => isToday(reminder.due_at)).length;
   const onlineCount = devices.filter(isDeviceOnline).length;
 
-  const today = new Date().toLocaleDateString('en-GB', {
+  const today = new Date().toLocaleDateString(locale, {
     weekday: 'long',
     day: 'numeric',
     month: 'long',
@@ -57,7 +60,10 @@ export default function HomeScreen() {
 
   return (
     <Screen>
-      <ScreenHeader eyebrow={today} title={name ? `${greeting()}, ${name}` : greeting()} />
+      <ScreenHeader
+        eyebrow={today}
+        title={name ? `${greeting(t.today)}, ${name}` : greeting(t.today)}
+      />
 
       {error && <Notice tone="error" message={error} />}
       {actionError && <Notice tone="error" message={actionError} />}
@@ -67,7 +73,7 @@ export default function HomeScreen() {
         <Card variant="highlight">
           <View style={styles.focusLabel}>
             <Feather name="star" size={13} color={Colors.teal} />
-            <Text style={styles.focusLabelText}>Next up</Text>
+            <Text style={styles.focusLabelText}>{t.today.nextUp}</Text>
           </View>
           <View style={styles.focusBody}>
             <Text style={styles.focusTitle} numberOfLines={3}>
@@ -76,7 +82,7 @@ export default function HomeScreen() {
             <Pressable
               onPress={() => handleComplete(next.id)}
               accessibilityRole="button"
-              accessibilityLabel={`Mark "${next.title}" as done`}
+              accessibilityLabel={t.today.markDone(next.title)}
               style={({ pressed }) => [styles.doneButton, pressed && styles.doneButtonPressed]}>
               <Feather name="check" size={26} color={Colors.white} />
             </Pressable>
@@ -84,18 +90,20 @@ export default function HomeScreen() {
           <View style={styles.focusFooter}>
             <Feather name="clock" size={14} color={Colors.teal} />
             <Text style={styles.focusFooterText}>
-              {isToday(next.due_at)
-                ? 'Today'
-                : new Date(next.due_at).toLocaleDateString('en-GB', { weekday: 'long' })}{' '}
-              at {formatTime(next.due_at)}
+              {t.today.dayAt(
+                isToday(next.due_at)
+                  ? t.common.today
+                  : new Date(next.due_at).toLocaleDateString(locale, { weekday: 'long' }),
+                formatTime(next.due_at, locale),
+              )}
               {next.details ? ` · ${next.details}` : ''}
             </Text>
           </View>
         </Card>
       ) : (
         <Card variant="highlight">
-          <Text style={styles.focusTitle}>Nothing left to do.</Text>
-          <Text style={styles.emptyText}>Enjoy the free time.</Text>
+          <Text style={styles.focusTitle}>{t.today.nothingLeft}</Text>
+          <Text style={styles.emptyText}>{t.today.enjoy}</Text>
         </Card>
       )}
 
@@ -104,10 +112,10 @@ export default function HomeScreen() {
         <Card>
           <View style={styles.sectionHeading}>
             <View>
-              <Text style={styles.sectionEyebrow}>Then</Text>
-              <Text style={styles.sectionTitle}>Your reminders</Text>
+              <Text style={styles.sectionEyebrow}>{t.today.then}</Text>
+              <Text style={styles.sectionTitle}>{t.today.yourReminders}</Text>
             </View>
-            <TextLink label="See all" onPress={() => router.navigate('/reminders')} />
+            <TextLink label={t.today.seeAll} onPress={() => router.navigate('/reminders')} />
           </View>
           {upcoming.slice(0, PREVIEW_COUNT).map((reminder, index, shown) => (
             <ReminderRow
@@ -120,9 +128,7 @@ export default function HomeScreen() {
             />
           ))}
           <Text style={styles.note}>
-            {leftToday === 0
-              ? 'Nothing more for today.'
-              : `${leftToday} thing${leftToday > 1 ? 's' : ''} left for today.`}
+            {leftToday === 0 ? t.today.nothingMoreToday : t.today.leftToday(leftToday)}
           </Text>
         </Card>
       )}
@@ -137,13 +143,11 @@ export default function HomeScreen() {
             <View style={styles.devicesTexts}>
               <Text style={styles.devicesTitle}>
                 {devices.length === 0
-                  ? 'No device yet'
-                  : `${onlineCount} of ${devices.length} device${devices.length > 1 ? 's' : ''} online`}
+                  ? t.today.noDevice
+                  : t.today.devicesOnline(onlineCount, devices.length)}
               </Text>
               <Text style={styles.devicesSubtitle}>
-                {devices.length === 0
-                  ? 'Pair your desk companion in Settings'
-                  : 'Manage alerts in Settings'}
+                {devices.length === 0 ? t.today.pairInSettings : t.today.manageInSettings}
               </Text>
             </View>
             <Feather name="chevron-right" size={20} color={Colors.textMuted} />

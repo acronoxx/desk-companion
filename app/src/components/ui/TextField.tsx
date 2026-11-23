@@ -3,6 +3,7 @@ import { Pressable, StyleSheet, Text, TextInput, View, type TextInputProps } fro
 import Feather from '@expo/vector-icons/Feather';
 import { Colors } from '@/constants/Colors';
 import { Fonts } from '@/constants/Fonts';
+import { useLanguage } from '@/hooks/useLanguage';
 
 type TextFieldProps = Omit<TextInputProps, 'style' | 'secureTextEntry'> & {
   label: string;
@@ -21,6 +22,7 @@ export default function TextField({
 }: TextFieldProps) {
   const [isFocused, setIsFocused] = useState(false);
   const [isHidden, setIsHidden] = useState(password);
+  const { t } = useLanguage();
 
   return (
     <View style={styles.wrapper}>
@@ -46,7 +48,7 @@ export default function TextField({
             onPress={() => setIsHidden(!isHidden)}
             hitSlop={10}
             accessibilityRole="button"
-            accessibilityLabel={isHidden ? 'Show password' : 'Hide password'}
+            accessibilityLabel={isHidden ? t.common.showPassword : t.common.hidePassword}
             style={styles.eye}>
             <Feather name={isHidden ? 'eye' : 'eye-off'} size={18} color={Colors.textMuted} />
           </Pressable>

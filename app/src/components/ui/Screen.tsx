@@ -31,6 +31,8 @@ export default function Screen({ children, scroll = true, tabBar = true }: Scree
           <ScrollView
             contentContainerStyle={contentStyle}
             keyboardShouldPersistTaps="handled"
+            // iOS bounces even when everything fits: only scroll when there is more to see.
+            alwaysBounceVertical={false}
             showsVerticalScrollIndicator={false}>
             {children}
           </ScrollView>
@@ -43,7 +45,7 @@ export default function Screen({ children, scroll = true, tabBar = true }: Scree
 }
 
 /** Height of the floating tab bar + its margin, so the last item is not hidden. */
-export const TAB_BAR_SPACE = 110;
+export const TAB_BAR_SPACE = 118;
 
 const styles = StyleSheet.create({
   safeArea: {

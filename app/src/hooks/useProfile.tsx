@@ -2,12 +2,17 @@ import { createContext, useContext, useEffect, useState, type ReactNode } from '
 import type { User } from '@supabase/supabase-js';
 import type { Profile } from '@/types/models';
 import { useAuth } from './useAuth';
-import { getProfile } from '@/services/profile';
+import { getProfile, updateProfile } from '@/services/profile';
 
 export type UseProfileResult = {
   /** The profile of the logged-in user, null while loading or if logged out. */
   profile: Profile | null;
   isLoading: boolean;
+  /**
+   * Changes the display name (already trimmed, not empty). Every screen shows it right away.
+   * @throws If the network fails: the screen shows the error.
+   */
+  updateDisplayName: (displayName: string) => Promise<void>;
 };
 
 const ProfileContext = createContext<UseProfileResult | undefined>(undefined);
@@ -68,8 +73,16 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId]);
 
+  const updateDisplayName = async (displayName: string) => {
+    if (!userId) return;
+    const updated = await updateProfile(userId, { display_name: displayName });
+    setProfile(updated);
+  };
+
   return (
-    <ProfileContext.Provider value={{ profile, isLoading }}>{children}</ProfileContext.Provider>
+    <ProfileContext.Provider value={{ profile, isLoading, updateDisplayName }}>
+      {children}
+    </ProfileContext.Provider>
   );
 }
 

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Button from '@/components/ui/Button';
 import Card from '@/components/ui/Card';
 import Chip from '@/components/ui/Chip';
@@ -7,6 +7,15 @@ import DateTimeField from '@/components/ui/DateTimeField';
 import TextField from '@/components/ui/TextField';
 import { Colors } from '@/constants/Colors';
 import { Fonts } from '@/constants/Fonts';
+import { useLanguage } from '@/hooks/useLanguage';
+import type { Strings } from '@/i18n/en';
+import {
+  isoWeekday,
+  nextMatchingDay,
+  normalizeDays,
+  recurrenceLabel,
+  WEEKDAYS,
+} from '@/lib/recurrence';
 import type { Device, Recurrence, Reminder, ReminderInput } from '@/types/models';
 
 export type ReminderFormValues = {
@@ -33,19 +42,30 @@ const MAX_TITLE_LENGTH = 50;
 /** How long before the deadline the device alerts, in minutes. */
 const ALERT_OFFSETS = [0, 5, 15, 30, 60, 24 * 60];
 
-const RECURRENCES: { value: Recurrence | null; label: string }[] = [
-  { value: null, label: 'Once' },
-  { value: 'daily', label: 'Every day' },
-  { value: 'weekly', label: 'Every week' },
-  { value: 'monthly', label: 'Every month' },
-  { value: 'yearly', label: 'Every year' },
-];
+/** The repeat choices, in order. null = once. Labels come from t.recurrence. */
+const RECURRENCES: (Recurrence | null)[] = [null, 'daily', 'weekly', 'monthly', 'yearly'];
 
-function offsetLabel(minutes: number): string {
-  if (minutes === 0) return 'At due time';
-  if (minutes % (24 * 60) === 0) return `${minutes / (24 * 60)} day before`;
-  if (minutes % 60 === 0) return `${minutes / 60} h before`;
-  return `${minutes} min before`;
+function offsetLabel(minutes: number, t: Strings['form']): string {
+  if (minutes === 0) return t.atDueTime;
+  if (minutes % (24 * 60) === 0) return t.daysBefore(minutes / (24 * 60));
+  if (minutes % 60 === 0) return t.hoursBefore(minutes / 60);
+  return t.minutesBefore(minutes);
+}
+
+/**
+ * The repeat rule to save. A weekly reminder keeps its chosen days, and its deadline moves to the
+ * first chosen day (Wednesday with "Thu, Fri" → Thursday, same time). All 7 days = every day.
+ */
+function repeatRule(
+  recurrence: Recurrence | null,
+  days: number[],
+  dueAt: Date,
+): { recurrence: Recurrence | null; recurrence_days: number[] | null; dueAt: Date } {
+  if (recurrence !== 'weekly') return { recurrence, recurrence_days: null, dueAt };
+  const sorted = normalizeDays(days);
+  if (sorted.length === WEEKDAYS.length)
+    return { recurrence: 'daily', recurrence_days: null, dueAt };
+  return { recurrence, recurrence_days: sorted, dueAt: nextMatchingDay(dueAt, sorted) };
 }
 
 /** The next full hour, e.g. 14:23 → 15:00. Default deadline of a new reminder. */
@@ -63,6 +83,7 @@ export default function ReminderForm({
   submitLabel,
   onSubmit,
 }: ReminderFormProps) {
+  const { t, locale } = useLanguage();
   const [title, setTitle] = useState(initial?.title ?? '');
   const [details, setDetails] = useState(initial?.details ?? '');
   const [dueAt, setDueAt] = useState(() => (initial ? new Date(initial.due_at) : nextFullHour()));
@@ -74,6 +95,10 @@ export default function ReminderForm({
       : 0,
   );
   const [recurrence, setRecurrence] = useState<Recurrence | null>(initial?.recurrence ?? null);
+  /** The days a weekly reminder repeats on. Starts on the day of the deadline. */
+  const [weekDays, setWeekDays] = useState<number[]>(
+    () => initial?.recurrence_days ?? [isoWeekday(dueAt)],
+  );
   const [deviceIds, setDeviceIds] = useState<string[]>(initialDeviceIds);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [hasTriedSubmit, setHasTriedSubmit] = useState(false);
@@ -84,10 +109,21 @@ export default function ReminderForm({
     : [...ALERT_OFFSETS, alertOffset].sort((a, b) => a - b);
 
   // ----- Validation -----
-  const titleError = title.trim() === '' ? 'Give your reminder a title.' : null;
+  const titleError = title.trim() === '' ? t.form.titleRequired : null;
   // Only a new reminder must be in the future: an overdue one can still be edited.
-  const dueError = !initial && dueAt <= new Date() ? 'Pick a time in the future.' : null;
+  const dueError = !initial && dueAt <= new Date() ? t.form.futureRequired : null;
   const isValid = titleError === null && dueError === null;
+
+  const rule = repeatRule(recurrence, weekDays, dueAt);
+  const isMoved = rule.dueAt.getTime() !== dueAt.getTime();
+
+  /** Turns a day on or off. The last selected day can't be turned off. */
+  const toggleWeekDay = (iso: number) => {
+    setWeekDays((current) => {
+      if (!current.includes(iso)) return [...current, iso];
+      return current.length > 1 ? current.filter((day) => day !== iso) : current;
+    });
+  };
 
   const toggleDevice = (deviceId: string) => {
     setDeviceIds((current) =>
@@ -100,14 +136,15 @@ export default function ReminderForm({
     if (!isValid) return;
 
     setIsSubmitting(true);
-    const remindAt = new Date(dueAt.getTime() - alertOffset * 60_000);
+    const remindAt = new Date(rule.dueAt.getTime() - alertOffset * 60_000);
     await onSubmit({
       input: {
         title: title.trim(),
         details: details.trim() === '' ? null : details.trim(),
-        due_at: dueAt.toISOString(),
+        due_at: rule.dueAt.toISOString(),
         remind_at: remindAt.toISOString(),
-        recurrence,
+        recurrence: rule.recurrence,
+        recurrence_days: rule.recurrence_days,
       },
       deviceIds,
     });
@@ -120,19 +157,19 @@ export default function ReminderForm({
       {/* ----- What ----- */}
       <Card style={styles.section}>
         <TextField
-          label={`Title (${title.length}/${MAX_TITLE_LENGTH})`}
+          label={t.form.title(title.length, MAX_TITLE_LENGTH)}
           value={title}
           onChangeText={setTitle}
-          placeholder="Send the lab report"
+          placeholder={t.form.titlePlaceholder}
           maxLength={MAX_TITLE_LENGTH}
           returnKeyType="next"
           error={hasTriedSubmit ? titleError : null}
         />
         <TextField
-          label="Details (optional)"
+          label={t.form.details}
           value={details}
           onChangeText={setDetails}
-          placeholder="Room, link, what to bring…"
+          placeholder={t.form.detailsPlaceholder}
           multiline
         />
       </Card>
@@ -140,7 +177,7 @@ export default function ReminderForm({
       {/* ----- When ----- */}
       <Card style={styles.section}>
         <DateTimeField
-          label="Due"
+          label={t.form.due}
           value={dueAt}
           onChange={setDueAt}
           minimumDate={initial ? undefined : new Date()}
@@ -148,12 +185,12 @@ export default function ReminderForm({
         {hasTriedSubmit && dueError && <Text style={styles.error}>{dueError}</Text>}
 
         <View style={styles.group}>
-          <Text style={styles.groupLabel}>Alert</Text>
+          <Text style={styles.groupLabel}>{t.form.alert}</Text>
           <View style={styles.chips}>
             {offsets.map((minutes) => (
               <Chip
                 key={minutes}
-                label={offsetLabel(minutes)}
+                label={offsetLabel(minutes, t.form)}
                 selected={alertOffset === minutes}
                 onPress={() => setAlertOffset(minutes)}
               />
@@ -162,29 +199,65 @@ export default function ReminderForm({
         </View>
 
         <View style={styles.group}>
-          <Text style={styles.groupLabel}>Repeat</Text>
+          <Text style={styles.groupLabel}>{t.form.repeat}</Text>
           <View style={styles.chips}>
             {RECURRENCES.map((option) => (
               <Chip
-                key={option.label}
-                label={option.label}
-                icon={option.value ? 'repeat' : undefined}
-                selected={recurrence === option.value}
-                onPress={() => setRecurrence(option.value)}
+                key={option ?? 'once'}
+                label={option ? t.recurrence[option] : t.recurrence.once}
+                icon={option ? 'repeat' : undefined}
+                selected={recurrence === option}
+                onPress={() => setRecurrence(option)}
               />
             ))}
           </View>
+
+          {recurrence === 'weekly' && (
+            <>
+              <View style={styles.days}>
+                {WEEKDAYS.map((iso) => {
+                  const isOn = weekDays.includes(iso);
+                  return (
+                    <Pressable
+                      key={iso}
+                      onPress={() => toggleWeekDay(iso)}
+                      accessibilityRole="checkbox"
+                      accessibilityLabel={t.recurrence.dayShort[iso - 1]}
+                      accessibilityState={{ checked: isOn }}
+                      style={({ pressed }) => [
+                        styles.day,
+                        isOn && styles.dayOn,
+                        pressed && !isOn && styles.dayPressed,
+                      ]}>
+                      <Text style={[styles.dayLabel, isOn && styles.dayLabelOn]}>
+                        {t.recurrence.dayLetter[iso - 1]}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+              <Text style={styles.hint}>
+                {recurrenceLabel(t.recurrence, rule.recurrence, rule.recurrence_days)}
+                {isMoved &&
+                  t.form.starts(
+                    rule.dueAt.toLocaleDateString(locale, {
+                      weekday: 'long',
+                      day: 'numeric',
+                      month: 'long',
+                    }),
+                  )}
+              </Text>
+            </>
+          )}
         </View>
       </Card>
 
       {/* ----- Where ----- */}
       <Card style={styles.section}>
         <View style={styles.group}>
-          <Text style={styles.groupLabel}>Devices that alert</Text>
+          <Text style={styles.groupLabel}>{t.form.devices}</Text>
           {devices.length === 0 ? (
-            <Text style={styles.hint}>
-              No device paired yet: the reminder will only show in the app.
-            </Text>
+            <Text style={styles.hint}>{t.form.noDevice}</Text>
           ) : (
             <>
               <View style={styles.chips}>
@@ -199,9 +272,7 @@ export default function ReminderForm({
                   />
                 ))}
               </View>
-              {deviceIds.length === 0 && (
-                <Text style={styles.hint}>None selected: the reminder only shows in the app.</Text>
-              )}
+              {deviceIds.length === 0 && <Text style={styles.hint}>{t.form.noneSelected}</Text>}
             </>
           )}
         </View>
@@ -239,6 +310,40 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 8,
+  },
+
+  // ----- Days of the week -----
+  days: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 6,
+  },
+  day: {
+    flex: 1,
+    maxWidth: 44,
+    aspectRatio: 1,
+    borderRadius: 99,
+    borderWidth: 2,
+    borderColor: Colors.line,
+    backgroundColor: Colors.white,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dayOn: {
+    borderColor: Colors.ink,
+    backgroundColor: Colors.green,
+  },
+  dayPressed: {
+    backgroundColor: Colors.surfaceAlt,
+  },
+  dayLabel: {
+    fontFamily: Fonts.bodyBold,
+    fontSize: 13,
+    color: Colors.textMuted,
+  },
+  dayLabelOn: {
+    fontFamily: Fonts.bodyBlack,
+    color: Colors.ink,
   },
 
   // ----- Messages -----

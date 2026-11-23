@@ -2,7 +2,9 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Feather from '@expo/vector-icons/Feather';
 import { Colors } from '@/constants/Colors';
 import { Fonts } from '@/constants/Fonts';
-import type { Recurrence, Reminder } from '@/types/models';
+import { useLanguage } from '@/hooks/useLanguage';
+import { recurrenceLabel } from '@/lib/recurrence';
+import type { Reminder } from '@/types/models';
 
 type ReminderRowProps = {
   reminder: Reminder;
@@ -16,19 +18,12 @@ type ReminderRowProps = {
   isLast?: boolean;
 };
 
-const RECURRENCE_LABELS: Record<Recurrence, string> = {
-  daily: 'Every day',
-  weekly: 'Every week',
-  monthly: 'Every month',
-  yearly: 'Every year',
-};
-
-function formatTime(iso: string): string {
-  return new Date(iso).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+function formatTime(iso: string, locale: string): string {
+  return new Date(iso).toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
 }
 
-function formatDay(iso: string): string {
-  return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+function formatDay(iso: string, locale: string): string {
+  return new Date(iso).toLocaleDateString(locale, { day: 'numeric', month: 'short' });
 }
 
 /** One reminder in a list: a check circle, the title and the due time. */
@@ -39,8 +34,10 @@ export default function ReminderRow({
   showDate = false,
   isLast = false,
 }: ReminderRowProps) {
+  const { t, locale } = useLanguage();
   const isDone = reminder.completed_at !== null;
   const isOverdue = !isDone && new Date(reminder.due_at) < new Date();
+  const repeat = recurrenceLabel(t.recurrence, reminder.recurrence, reminder.recurrence_days);
 
   return (
     <View style={[styles.row, !isLast && styles.separator, isDone && styles.rowDone]}>
@@ -49,7 +46,7 @@ export default function ReminderRow({
         disabled={isDone}
         hitSlop={10}
         accessibilityRole="checkbox"
-        accessibilityLabel={`Mark "${reminder.title}" as done`}
+        accessibilityLabel={t.reminders.markDone(reminder.title)}
         accessibilityState={{ checked: isDone, disabled: isDone }}>
         {({ pressed }) => (
           <Feather
@@ -64,19 +61,19 @@ export default function ReminderRow({
         onPress={onPress ? () => onPress(reminder.id) : undefined}
         disabled={!onPress}
         accessibilityRole={onPress ? 'button' : undefined}
-        accessibilityHint={onPress ? 'Opens the reminder' : undefined}
+        accessibilityHint={onPress ? t.reminders.opensReminder : undefined}
         style={({ pressed }) => [styles.body, pressed && styles.bodyPressed]}>
         <View style={styles.texts}>
           <Text style={[styles.title, isDone && styles.titleDone]} numberOfLines={2}>
             {reminder.title}
           </Text>
 
-          {(reminder.recurrence || reminder.details) && (
+          {(repeat || reminder.details) && (
             <View style={styles.meta}>
-              {reminder.recurrence && (
+              {repeat && (
                 <View style={styles.metaItem}>
                   <Feather name="repeat" size={11} color={Colors.teal} />
-                  <Text style={styles.recurrence}>{RECURRENCE_LABELS[reminder.recurrence]}</Text>
+                  <Text style={styles.recurrence}>{repeat}</Text>
                 </View>
               )}
               {reminder.details && (
@@ -90,12 +87,12 @@ export default function ReminderRow({
 
         <View style={styles.when}>
           <Text style={[styles.time, isOverdue && styles.overdue]}>
-            {formatTime(reminder.due_at)}
+            {formatTime(reminder.due_at, locale)}
           </Text>
           {isOverdue ? (
-            <Text style={[styles.day, styles.overdue]}>Overdue</Text>
+            <Text style={[styles.day, styles.overdue]}>{t.common.overdue}</Text>
           ) : (
-            showDate && <Text style={styles.day}>{formatDay(reminder.due_at)}</Text>
+            showDate && <Text style={styles.day}>{formatDay(reminder.due_at, locale)}</Text>
           )}
         </View>
       </Pressable>

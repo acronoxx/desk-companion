@@ -99,16 +99,17 @@ sequenceDiagram
 Only from the app: the device has no button. The app calls the SQL function `complete_reminder`, which handles recurrence:
 
 - one-off reminder → `completed_at = now()`;
-- recurring reminder → `due_at` and `remind_at` move to the next occurrence (next day / week / month / year), `completed_at` stays `null`.
+- recurring reminder → `due_at` and `remind_at` move to the next occurrence (next day / week / month / year, or the next chosen day of the week), `completed_at` stays `null`.
 
 The device sees it at its next sync (at most 30 s later): the reminder is gone from the list (or, if recurring, its `remind_at` moved forward), so the LED turns off.
 
 ## Database
 
-See `database/schema.md`. Done for the device: `devices.secret_hash` (authenticates the ESP32) and a nullable `devices.user_id` (the ESP32 registers itself before being paired). Still to add:
+See `database/schema.md`. Done: `devices.secret_hash` (authenticates the ESP32), a nullable `devices.user_id` (the ESP32 registers itself before being paired), the full default of `devices.settings`, `reminders.recurrence_days` (repeat on chosen days of the week), and the `complete_reminder(reminder_id uuid, time_zone text)` function. Still to add:
 
-- pairing (code typed in the app → sets `devices.user_id`);
-- the `complete_reminder(reminder_id uuid)` function.
+- pairing (code typed in the app → sets `devices.user_id`).
+
+`database/schema.sql` creates a new database. A database created with an older version is updated with the files of `database/migrations/`, run once each, in order, in the SQL Editor.
 
 ## Edge Functions (Supabase, TypeScript / Deno)
 
@@ -133,127 +134,146 @@ Shared method: `authenticateDevice(admin, req): Promise<Device | null>` — read
 ```
 app/src/
 ├── app/                          ← screens (Expo Router)
-│   ├── _layout.tsx               ← root Stack + redirect logged in / logged out (useSession)
+│   ├── _layout.tsx               ← fonts, providers, redirect logged in / logged out
 │   ├── (auth)/                   ← no tabs, only reachable when logged out
-│   │   ├── _layout.tsx
+│   │   ├── _layout.tsx           ← opens on login
 │   │   ├── login.tsx             ← email + password
-│   │   └── signup.tsx            ← email + password (display name set by the SQL trigger)
+│   │   └── signup.tsx            ← first name + email + password
 │   ├── (tabs)/                   ← only reachable when logged in
-│   │   ├── _layout.tsx           ← tabs: Home · Calendar · Reminders · Settings
-│   │   ├── index.tsx             ← home: next reminders, all devices
-│   │   ├── calendar.tsx          ← reminders by day
-│   │   ├── reminders.tsx         ← full list, mark as done, "+" button
-│   │   └── settings.tsx          ← display name, device list, log out
+│   │   ├── _layout.tsx           ← floating tab bar: Today · Reminders · Calendar · Settings
+│   │   ├── index.tsx             ← Today: next reminder, the following ones, devices summary
+│   │   ├── reminders.tsx         ← list by day, search, filter (status, one-off / repeating), sort, "+" button
+│   │   ├── calendar.tsx          ← month grid + reminders and calendar events of the selected day
+│   │   └── settings.tsx          ← profile (edit name), language, devices, add a device, calendars, sign out
 │   ├── reminders/                ← pushed on top of the tabs (no tab bar)
-│   │   ├── new.tsx               ← creation form (?deviceId=…)
-│   │   └── [id].tsx              ← edit / delete
+│   │   ├── new.tsx               ← creation form (modal)
+│   │   └── [id].tsx              ← edit, mark as done, delete
 │   └── devices/
-│       ├── pair.tsx              ← pairing code input
-│       └── [id].tsx              ← name, vibration intensity, delete
+│       ├── pair.tsx              ← pairing code input (modal)
+│       └── [id].tsx              ← name, vibration, light, remove
+│   └── calendars.tsx             ← link phone calendars and .ics links
 ├── components/                   ← reusable UI, never in app/
-│   ├── reminder-card.tsx
-│   ├── reminder-form.tsx         ← shared by reminders/new.tsx and reminders/[id].tsx
-│   └── device-card.tsx
+│   ├── ui/                       ← generic: Button, TextField, Card, Screen, TopBar, Chip, Toggle,
+│   │                               Stepper, DateTimeField, CodeInput, Notice, Badge...
+│   ├── AuthLayout.tsx            ← frame of login / signup
+│   ├── ReminderForm.tsx          ← shared by reminders/new.tsx and reminders/[id].tsx
+│   ├── ReminderRow.tsx · EventRow.tsx · DeviceRow.tsx · MonthCalendar.tsx · TabBarIcon.tsx
 ├── lib/
-│   └── supabase.ts               ← createClient + session storage
+│   ├── supabase.ts               ← createClient + session storage
+│   └── recurrence.ts             ← repeat labels, days of the week
 ├── services/                     ← every Supabase call, nothing else
-│   ├── auth.ts
-│   ├── profile.ts
-│   ├── devices.ts
-│   └── reminders.ts
-├── hooks/
-│   ├── use-session.ts
-│   ├── use-devices.ts
-│   └── use-reminders.ts
+│   ├── auth.ts · profile.ts · devices.ts · reminders.ts
+│   ├── calendars.ts              ← outside calendars (phone + .ics), no Supabase
+├── hooks/                        ← state shared by the screens (React contexts)
+│   ├── useAuth.tsx · useProfile.tsx · useReminders.tsx · useDevices.tsx · useCalendarEvents.tsx
+│   ├── useLanguage.tsx           ← app language (en / fr), saved on the phone
+│   └── useActionError.ts         ← turns a failed action into a message
+├── i18n/                         ← en.ts (reference texts) · fr.ts (same keys, checked by TypeScript)
 ├── types/
-│   └── models.ts                 ← Profile, Device, Reminder... (see below)
-└── constants/                    ← colors, sizes, sync interval...
+│   ├── database.ts               ← generated (npx supabase gen types), never edited by hand
+│   └── models.ts                 ← Profile, Device, Reminder... built on database.ts
+└── constants/                    ← Colors, Fonts
 ```
 
-Simple rule: **screens never call Supabase directly**. Screen → hook → service → Supabase. If the database changes, only `services/` changes.
+Simple rule: **only `services/` imports the Supabase client**. Screens read the data through the hooks (screen → hook → service → Supabase) and call a service directly only for one-off actions (sign in, sign out). If the database changes, only `services/` changes.
 
-Navigation: no screen navigates after login or logout. `signIn` / `signOut` change the session, `onAuthChange` fires, and the root `_layout.tsx` redirects to `(tabs)` or `(auth)`.
+Navigation: no screen navigates after login or logout. `signInWithEmail` / `signOut` change the session, `onAuthChange` fires, and the root `_layout.tsx` redirects to `(tabs)` or `(auth)`.
 
-Screens outside `(tabs)/` (`reminders/`, `devices/`) are opened with `router.push` and show a back button instead of the tab bar. Keep them out of `(tabs)/`: every file in that folder becomes a tab.
+Screens outside `(tabs)/` (`reminders/`, `devices/`) are opened with `router.push` and show a back button (`TopBar`) instead of the tab bar. They are declared in the root `_layout.tsx`, inside the logged-in `Stack.Protected`. Keep them out of `(tabs)/`: every file in that folder becomes a tab. With typed routes, a dynamic screen is opened with `router.push({ pathname: '/reminders/[id]', params: { id } })`.
 
 Environment variables go in `app/.env.local` (ignored by git): `EXPO_PUBLIC_SUPABASE_URL` and `EXPO_PUBLIC_SUPABASE_KEY` (publishable key, never the secret one). Only variables starting with `EXPO_PUBLIC_` reach the app. Restart `npx expo start` after changing them.
 
-Packages: `@supabase/supabase-js` and `@react-native-async-storage/async-storage` (keep the session) are installed. Still to add with `npx expo install`: `@react-native-community/datetimepicker` (date/time picker).
+Packages added with `npx expo install`: `@supabase/supabase-js`, `@react-native-async-storage/async-storage` (keeps the session), `@expo/vector-icons` (Feather icons), `@react-native-community/datetimepicker` (date/time picker), `@expo-google-fonts/fredoka` and `@expo-google-fonts/nunito`, `expo-calendar` (phone calendars). With npm: `ical.js` (.ics parser: repeating events, time zones).
+
+### Outside calendars
+
+Read-only: events of linked calendars show in the Calendar tab (teal dot, color bar) but are not reminders, are not stored in Supabase and are not sent to the device.
+
+- **Phone calendars** (`expo-calendar/legacy`, the new API is not in Expo Go): every calendar of an account set up on the phone (Google, iCloud, Outlook). No OAuth needed. Not available on web.
+- **.ics links**: a subscription URL (Google "secret address in iCal format", iCloud public calendar, school timetable), downloaded and expanded from 2 months ago to 12 months ahead. The phone downloads it directly; on web it goes through the `ics-proxy` Edge Function (logged-in users only), because most calendar servers send no CORS headers.
+- The choices (calendar ids, links) are saved on the phone in AsyncStorage, per user (`calendar-settings:<user id>`).
+
+### Types
+
+`types/models.ts` builds the app types on the generated ones (`Tables<'reminders'>`...). Dates are ISO strings in UTC.
+
+```ts
+type Recurrence = 'daily' | 'weekly' | 'monthly' | 'yearly';
+type Profile = Tables<'profiles'>;              // id, display_name, created_at
+type Reminder = Tables<'reminders'>;            // title 1-50 chars, remind_at <= due_at, completed_at null = to do
+type ReminderInput = Pick<TablesInsert<'reminders'>, 'title' | 'details' | 'due_at' | 'remind_at' | 'recurrence' | 'recurrence_days'>;
+type DeviceSettings = {
+  vibration_enabled: boolean; vibration_intensity: number; vibration_duration: number;
+  led_enabled: boolean; led_color: string; led_brightness: number;
+};
+type Device = Omit<Tables<'devices'>, 'secret_hash' | 'settings'> & { settings: DeviceSettings };
+```
+
+The devices a reminder is shown on are not in `Reminder`: they are read with `getReminderDeviceIds` and written with `setReminderDevices`.
 
 ### Service methods
 
-```ts
-// types/models.ts
-type Recurrence = 'daily' | 'weekly' | 'monthly' | 'yearly';
-
-type Profile = {
-  id: string;                // same as the auth.users id
-  display_name: string;      // never null (default: email before the @)
-  created_at: string;        // ISO, UTC
-};
-
-type Device = {
-  id: string;
-  name: string;
-  serial_number: string;
-  last_seen_at: string | null;
-  settings: { vibration_intensity: number };
-};
-
-type Reminder = {
-  id: string;
-  title: string;             // 1 to 50 characters
-  details: string | null;
-  due_at: string;            // ISO, UTC
-  remind_at: string;         // ISO, UTC, <= due_at
-  recurrence: Recurrence | null;
-  completed_at: string | null;
-  device_ids: string[];      // devices it is shown on (reminder_devices table)
-};
-
-type ReminderInput = Pick<Reminder, 'title' | 'details' | 'due_at' | 'remind_at' | 'recurrence' | 'device_ids'>;
-```
+Every method throws an `Error` if Supabase fails (the auth ones throw the `AuthError`, so the screens can read its `code`).
 
 ```ts
 // services/auth.ts
-signUp(email: string, password: string): Promise<void>                 // display_name = part of the email before @ (SQL trigger)
-signIn(email: string, password: string): Promise<void>
+signUpWithEmail(email, password, displayName): Promise<{ session, user }>   // session null = email to confirm
+signInWithEmail(email, password): Promise<{ session, user }>
 signOut(): Promise<void>
-getSession(): Promise<Session | null>
-onAuthChange(callback: (session: Session | null) => void): () => void   // returns unsubscribe
+onAuthChange(callback: (session: Session | null) => void): () => void      // returns unsubscribe
 
 // services/profile.ts
-getProfile(): Promise<Profile>
-updateProfile(patch: { display_name?: string }): Promise<Profile>
+getProfile(userId): Promise<Profile>
+updateProfile(userId, updates: { display_name }): Promise<Profile>
 
 // services/devices.ts
-listDevices(): Promise<Device[]>
-getDevice(id: string): Promise<Device>
-claimDevice(code: string, name: string): Promise<Device>               // → Edge Function device-claim
-renameDevice(id: string, name: string): Promise<Device>
-updateDeviceSettings(id: string, settings: Partial<Device['settings']>): Promise<Device>
-deleteDevice(id: string): Promise<void>                                // reminders stay, only the links are deleted
-isDeviceOnline(device: Device): boolean                                // last_seen_at < 2 min
+claimDevice(code, name): Promise<Device>                                   // → Edge Function device-claim (not written yet)
+getDevices(userId): Promise<Device[]>                                      // sorted by name, never returns secret_hash
+getDevice(userId, deviceId): Promise<Device>
+updateDevice(userId, deviceId, { name?, settings?: Partial<DeviceSettings> }): Promise<Device>  // settings merged
+deleteDevice(userId, deviceId): Promise<void>                              // reminders stay, only the links are deleted
+isDeviceOnline(device): boolean                                            // last_seen_at < 5 min
 
 // services/reminders.ts
-listUpcomingReminders(): Promise<Reminder[]>                           // all devices, pending, sorted by due_at
-listDeviceReminders(deviceId: string, opts?: { includeCompleted?: boolean }): Promise<Reminder[]>
-getReminder(id: string): Promise<Reminder>
-createReminder(input: ReminderInput): Promise<Reminder>               // insert reminders + reminder_devices
-updateReminder(id: string, patch: Partial<ReminderInput>): Promise<Reminder>
-setReminderDevices(id: string, deviceIds: string[]): Promise<void>     // replaces the reminder_devices links
-deleteReminder(id: string): Promise<void>
-completeReminder(id: string): Promise<Reminder>                        // → rpc('complete_reminder')
-uncompleteReminder(id: string): Promise<Reminder>                      // completed_at = null
+createReminder(userId, input: ReminderInput): Promise<Reminder>
+getReminders(userId, includeCompleted = false): Promise<Reminder[]>       // sorted by due_at
+getReminder(userId, reminderId): Promise<Reminder>
+updateReminder(userId, reminderId, updates: Partial<ReminderInput>): Promise<Reminder>
+getReminderDeviceIds(reminderId): Promise<string[]>
+setReminderDevices(reminderId, deviceIds): Promise<void>                   // replaces the reminder_devices links
+completeReminder(reminderId): Promise<Reminder>                            // → rpc('complete_reminder')
+deleteReminder(userId, reminderId): Promise<void>
+isReminderCompleted(reminder): boolean
 ```
 
 ### Hooks
 
+The data hooks are React contexts: each provider loads its data once and shares it with every screen, so an action done on one tab shows on the others right away. The providers are in the root `_layout.tsx`, under `AuthProvider`, with `key={user.id}`: a new account starts from empty state.
+
 ```ts
-useSession(): { session: Session | null; loading: boolean }
-useDevices(): { devices: Device[]; loading: boolean; error: Error | null; refresh(): Promise<void> }
-useReminders(deviceId?: string): { reminders: Reminder[]; loading: boolean; error: Error | null; refresh(): Promise<void> }
+useAuth(): { session: Session | null; user: User | null; isLoading: boolean }
+useProfile(): { profile: Profile | null; isLoading: boolean }               // falls back to the signup name
+useReminders(): {
+  reminders: Reminder[];   // done ones included, sorted by due_at
+  isLoading: boolean;      // only the first load
+  error: string | null;
+  refresh(): void;
+  complete(reminderId): Promise<void>;
+  create(input, deviceIds?): Promise<void>;
+  update(reminderId, changes, deviceIds?): Promise<void>;   // deviceIds left out = links unchanged
+  remove(reminderId): Promise<void>;
+}
+useDevices(): {
+  devices: Device[]; isLoading: boolean; error: string | null; refresh(): void;
+  update(deviceId, { name?, settings? }): Promise<void>;
+  remove(deviceId): Promise<void>;
+  claim(code, name): Promise<void>;
+}
+useActionError(): { actionError: string | null; run(action, message): Promise<boolean>; clearActionError(): void }
 ```
+
+- `useReminders` and `useDevices` reload by themselves when the app comes back to the foreground (`AppState`), to show what changed meanwhile (online status, a reminder the device marked as done).
+- Their actions don't catch errors: the screen wraps them with `run(...)` from `useActionError`, which shows a `Notice` and returns `false` if the action failed.
 
 ## Firmware (ESP32)
 
